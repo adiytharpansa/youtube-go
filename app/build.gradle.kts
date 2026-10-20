@@ -8,7 +8,7 @@ plugins {
 }
 android {
     namespace = "com.app.youtubego"
-    compileSdk = 34
+    compileSdk = 35
     defaultConfig {
         applicationId = "com.app.youtubego"
         minSdk = 24
