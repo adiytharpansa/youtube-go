@@ -60,7 +60,7 @@ class DeviceStreamSource @Inject constructor(
             )
             DevicePlayback(
                 summary = summary,
-                description = extractor.textualDescription ?: "",
+                description = runCatching { extractor.description.content }.getOrNull() ?: "",
                 combined = combined,
                 dashUrl = runCatching { extractor.dashMpdUrl }.getOrNull()?.takeIf { it.isNotBlank() },
                 hlsUrl = runCatching { extractor.hlsUrl }.getOrNull()?.takeIf { it.isNotBlank() },
