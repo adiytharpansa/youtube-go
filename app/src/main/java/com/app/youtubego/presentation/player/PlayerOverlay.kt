@@ -29,12 +29,13 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import com.app.youtubego.presentation.common.formatDuration
+import com.app.youtubego.presentation.theme.YgAccent
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-internal val YtRed = Color(0xFFFF0000)
+internal val YtRed = YgAccent
 
 /** Cuplikan state ExoPlayer yang dibaca Compose (diperbarui lewat Player.Listener). */
 @Stable
