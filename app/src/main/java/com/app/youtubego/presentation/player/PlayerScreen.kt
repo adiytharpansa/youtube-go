@@ -2,6 +2,7 @@ package com.app.youtubego.presentation.player
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.view.ViewGroup
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -18,11 +19,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
@@ -54,12 +60,32 @@ fun PlayerScreen(videoId: String, onBack: () -> Unit, onVideoClick: (String) -> 
             when (e) { Lifecycle.Event.ON_PAUSE -> player.pause(); else -> Unit }
         }
         lifecycleOwner.lifecycle.addObserver(obs)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(obs); player.release() }
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(obs)
+            // Pulihkan orientasi & system bars bila layar ditinggalkan saat fullscreen.
+            context.findActivity()?.let {
+                it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                WindowCompat.getInsetsController(it.window, it.window.decorView).show(WindowInsetsCompat.Type.systemBars())
+            }
+            player.release()
+        }
     }
+    var playerError by remember(videoId) { mutableStateOf<String?>(null) }
+    DisposableEffect(player) {
+        val l = object : Player.Listener {
+            override fun onPlayerError(error: PlaybackException) { playerError = "Video gagal diputar. Coba lagi." }
+        }
+        player.addListener(l)
+        onDispose { player.removeListener(l) }
+    }
+    BackHandler(enabled = isFullscreen) { isFullscreen = false }
     // Terapkan fullscreen: kunci orientasi di Activity pemilik.
     LaunchedEffect(isFullscreen) {
-        val act = context as? Activity ?: return@LaunchedEffect
+        val act = context.findActivity() ?: return@LaunchedEffect
         act.requestedOrientation = if (isFullscreen) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        val ctrl = WindowCompat.getInsetsController(act.window, act.window.decorView)
+        ctrl.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (isFullscreen) ctrl.hide(WindowInsetsCompat.Type.systemBars()) else ctrl.show(WindowInsetsCompat.Type.systemBars())
     }
     Column(Modifier.fillMaxSize().background(Color.Black)) {
         Box(Modifier.fillMaxWidth().then(if (isFullscreen) Modifier.fillMaxHeight() else Modifier.aspectRatio(16f / 9f))) {
@@ -68,6 +94,16 @@ fun PlayerScreen(videoId: String, onBack: () -> Unit, onVideoClick: (String) -> 
                 modifier = Modifier.fillMaxSize(),
             )
             PlayerControls(player = player, isFullscreen = isFullscreen, onToggleFullscreen = { isFullscreen = !isFullscreen }, onBack = onBack)
+            playerError?.let { msg ->
+                Column(
+                    Modifier.fillMaxSize().background(Color.Black.copy(0.7f)),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(msg, color = Color.White)
+                    TextButton(onClick = { playerError = null; player.prepare(); player.play() }) { Text("Coba lagi") }
+                }
+            }
         }
         if (!isFullscreen) {
             when (val s = state) {
@@ -100,6 +136,8 @@ private fun PlayerControls(player: ExoPlayer, isFullscreen: Boolean, onToggleFul
     var playing by remember { mutableStateOf(player.isPlaying) }
     var position by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
+    var dragging by remember { mutableStateOf(false) }
+    var dragFrac by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(player) {
         while (true) { playing = player.isPlaying; position = player.currentPosition.coerceAtLeast(0); duration = player.duration.coerceAtLeast(0); delay(500) }
     }
@@ -112,12 +150,19 @@ private fun PlayerControls(player: ExoPlayer, isFullscreen: Boolean, onToggleFul
         Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(formatDuration(position / 1000), color = Color.White, style = MaterialTheme.typography.labelSmall)
             Slider(
-                value = if (duration > 0) position.toFloat() / duration else 0f,
-                onValueChange = { frac -> if (duration > 0) player.seekTo((frac * duration).toLong()) },
+                value = if (dragging) dragFrac else if (duration > 0) position.toFloat() / duration else 0f,
+                onValueChange = { dragging = true; dragFrac = it },
+                onValueChangeFinished = { if (duration > 0) player.seekTo((dragFrac * duration).toLong()); dragging = false },
                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
             )
             Text(formatDuration(duration / 1000), color = Color.White, style = MaterialTheme.typography.labelSmall)
             IconButton(onClick = onToggleFullscreen) { Icon(if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen, "Fullscreen", tint = Color.White) }
         }
     }
+}
+
+private fun android.content.Context.findActivity(): Activity? {
+    var c = this
+    while (c is android.content.ContextWrapper) { if (c is Activity) return c; c = c.baseContext }
+    return null
 }

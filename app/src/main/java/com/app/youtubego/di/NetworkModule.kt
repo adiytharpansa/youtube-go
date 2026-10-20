@@ -1,7 +1,7 @@
 package com.app.youtubego.di
 import com.app.youtubego.data.remote.ApiConstants
 import com.app.youtubego.data.remote.InvidiousApi
-import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
+import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -27,7 +27,11 @@ object NetworkModule {
         .cache(Cache(File(app.cacheDir, "http_cache"), 10L * 1024 * 1024))
         .connectTimeout(15, TimeUnit.SECONDS).readTimeout(25, TimeUnit.SECONDS)
         .addInterceptor { chain -> chain.proceed(chain.request().newBuilder().header("Accept", "application/json").build()) }
-        .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
+        .apply {
+            if (com.app.youtubego.BuildConfig.DEBUG) {
+                addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
+            }
+        }
         .build()
     @Provides @Singleton fun api(okHttp: OkHttpClient, json: Json): InvidiousApi =
         Retrofit.Builder().baseUrl(ApiConstants.BASE_URL).client(okHttp)

@@ -4,7 +4,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <application
         android:name=".YoutubeGoApp"
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:icon="@drawable/ic_launcher"
+        android:roundIcon="@drawable/ic_launcher"
         android:label="YouTube GO"
         android:supportsRtl="true"
         android:usesCleartextTraffic="false"
