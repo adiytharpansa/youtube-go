@@ -16,7 +16,7 @@ class VideoRepositoryImpl @Inject constructor(
     override suspend fun trending(category: HomeCategory): Result<List<VideoSummary>> = runIo {
         when {
             category.searchFallback != null -> api.search(category.searchFallback, type = "video").filter { it.type == "video" }.map { it.toSummary() }
-            category == HomeCategory.ALL -> {
+            category == HomeCategory.ALL || category == HomeCategory.FOR_YOU -> {
                 val t = runCatching { api.trending(null) }.getOrDefault(emptyList())
                 (if (t.isNotEmpty()) t else api.popular()).map { it.toSummary() }
             }

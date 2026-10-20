@@ -3,6 +3,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.app.youtubego.domain.model.VideoSummary
 import com.app.youtubego.domain.repository.HomeCategory
+import com.app.youtubego.domain.repository.InterestRepository
+import com.app.youtubego.domain.usecase.GetForYouFeedUseCase
 import com.app.youtubego.domain.usecase.GetTrendingUseCase
 import com.app.youtubego.presentation.common.UiState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -11,21 +13,62 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 data class HomeUiState(
-    val category: HomeCategory = HomeCategory.ALL,
+    val category: HomeCategory = HomeCategory.FOR_YOU,
     val videos: UiState<List<VideoSummary>> = UiState.Loading,
+    val refreshing: Boolean = false,
+    val showInterestSheet: Boolean = false,
 )
 @HiltViewModel
-class HomeViewModel @Inject constructor(private val getTrending: GetTrendingUseCase) : ViewModel() {
-    private val _state = MutableStateFlow(HomeUiState())
+class HomeViewModel @Inject constructor(
+    private val getTrending: GetTrendingUseCase,
+    private val getForYou: GetForYouFeedUseCase,
+    private val interestRepo: InterestRepository,
+) : ViewModel() {
+    private val _state = MutableStateFlow(HomeUiState(showInterestSheet = !interestRepo.profile.value.onboarded))
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
+    val profile = interestRepo.profile
     private var job: kotlinx.coroutines.Job? = null
-    init { load(HomeCategory.ALL) }
-    fun load(category: HomeCategory) {
+    /** Revisi profil minat saat feed terakhir dimuat; beda dengan sekarang = feed sudah basi. */
+    private var loadedRev = -1L
+    init { load(HomeCategory.FOR_YOU) }
+
+    /** silent = pertahankan daftar lama selama memuat (tarik-segarkan / kembali ke beranda). */
+    fun load(category: HomeCategory, silent: Boolean = false) {
         job?.cancel()
-        _state.value = _state.value.copy(category = category, videos = UiState.Loading)
-        job = getTrending(category).onEach { _state.value = _state.value.copy(videos = it) }.launchIn(viewModelScope)
+        loadedRev = interestRepo.profile.value.rev
+        _state.update { it.copy(category = category, videos = if (silent) it.videos else UiState.Loading, refreshing = silent) }
+        val flow = if (category == HomeCategory.FOR_YOU) getForYou() else getTrending(category)
+        job = flow.onEach { r ->
+            when {
+                r is UiState.Loading -> if (!silent) _state.update { it.copy(videos = r) }
+                silent && r is UiState.Error && _state.value.videos is UiState.Success -> _state.update { it.copy(refreshing = false) }
+                else -> _state.update { it.copy(videos = r, refreshing = false) }
+            }
+        }.launchIn(viewModelScope)
     }
     fun retry() = load(_state.value.category)
+    fun refresh() = load(_state.value.category, silent = true)
+
+    /** Dipanggil saat beranda kembali tampil / panel minat ditutup: segarkan bila minat berubah. */
+    fun refreshIfStale() {
+        val s = _state.value
+        if (s.category == HomeCategory.FOR_YOU && s.videos !is UiState.Loading && interestRepo.profile.value.rev != loadedRev) load(HomeCategory.FOR_YOU, silent = true)
+    }
+
+    fun openInterests() = _state.update { it.copy(showInterestSheet = true) }
+    fun closeInterests() {
+        interestRepo.markOnboarded()
+        _state.update { it.copy(showInterestSheet = false) }
+        refreshIfStale()
+    }
+    fun toggleSeed(id: String) {
+        val cur = interestRepo.profile.value.seeds
+        interestRepo.setSeeds(if (id in cur) cur - id else cur + id)
+    }
+    fun forgetTopic(topic: String) = interestRepo.forgetTopic(topic)
+    fun forgetChannel(id: String) = interestRepo.forgetChannel(id)
+    fun resetInterests() = interestRepo.reset()
 }

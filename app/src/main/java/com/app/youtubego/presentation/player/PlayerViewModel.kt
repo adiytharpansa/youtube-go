@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.app.youtubego.data.newpipe.DevicePlayback
 import com.app.youtubego.data.newpipe.DeviceStreamSource
 import com.app.youtubego.domain.model.VideoDetail
+import com.app.youtubego.domain.model.VideoSummary
+import com.app.youtubego.domain.repository.InterestRepository
 import com.app.youtubego.domain.usecase.GetVideoDetailUseCase
 import com.app.youtubego.presentation.common.UiState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,6 +23,7 @@ class PlayerViewModel @Inject constructor(
     savedState: SavedStateHandle,
     private val getDetail: GetVideoDetailUseCase,
     private val deviceSource: DeviceStreamSource,
+    private val interests: InterestRepository,
 ) : ViewModel() {
     private val videoId: String = checkNotNull(savedState["videoId"])
     private val _state = MutableStateFlow<UiState<VideoDetail>>(UiState.Loading)
@@ -32,6 +35,9 @@ class PlayerViewModel @Inject constructor(
     private val _deviceSettled = MutableStateFlow(false)
     val deviceSettled: StateFlow<Boolean> = _deviceSettled.asStateFlow()
     private var job: Job? = null
+    private var watchRecorded = false
+    /** Catat sinyal minat sekali per video: judul -> topik, channel -> afinitas. */
+    private fun recordWatchOnce(v: VideoSummary) { if (!watchRecorded) { watchRecorded = true; interests.recordWatch(v) } }
     private var deviceJob: Job? = null
     init { load() }
     /** Muat ulang dari awal (URL putar kedaluwarsa, jadi retry WAJIB mengambil data segar dari kedua jalur, bukan memutar ulang URL lama). */
@@ -42,12 +48,14 @@ class PlayerViewModel @Inject constructor(
         _device.value = null
         _deviceSettled.value = false
         job = getDetail(videoId).onEach { result ->
+            if (result is UiState.Success) recordWatchOnce(result.data.summary)
             val dev = _device.value
             _state.value = if (result is UiState.Error && dev != null) UiState.Success(fallbackDetail(dev)) else result
         }.launchIn(viewModelScope)
         deviceJob = viewModelScope.launch {
             val resolved = deviceSource.resolve(videoId).getOrNull()
             _device.value = resolved
+            resolved?.let { recordWatchOnce(it.summary) }
             _deviceSettled.value = true
             // Detail API terlanjur galat duluan, tetapi perangkat membawa data: tampilkan detail cadangan.
             if (resolved != null && _state.value is UiState.Error) {

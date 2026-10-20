@@ -5,8 +5,8 @@
     <application
         android:name=".YoutubeGoApp"
         android:allowBackup="false"
-        android:icon="@drawable/ic_launcher"
-        android:roundIcon="@drawable/ic_launcher"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="YouTube GO"
         android:supportsRtl="true"
         android:usesCleartextTraffic="false"

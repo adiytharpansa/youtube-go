@@ -2,6 +2,7 @@ package com.app.youtubego.presentation.search
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.app.youtubego.domain.model.VideoSummary
+import com.app.youtubego.domain.repository.InterestRepository
 import com.app.youtubego.domain.repository.VideoRepository
 import com.app.youtubego.domain.usecase.SearchVideosUseCase
 import com.app.youtubego.presentation.common.UiState
@@ -13,7 +14,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 data class SearchUiState(val query: String = "", val suggestions: List<String> = emptyList(), val results: UiState<List<VideoSummary>> = UiState.Success(emptyList()), val shortsOnly: Boolean = false)
 @HiltViewModel
-class SearchViewModel @Inject constructor(private val searchVideos: SearchVideosUseCase, private val repo: VideoRepository) : ViewModel() {
+class SearchViewModel @Inject constructor(private val searchVideos: SearchVideosUseCase, private val repo: VideoRepository, private val interests: InterestRepository) : ViewModel() {
     private val _state = MutableStateFlow(SearchUiState())
     val state: StateFlow<SearchUiState> = _state.asStateFlow()
     private var suggestJob: Job? = null
@@ -29,6 +30,7 @@ class SearchViewModel @Inject constructor(private val searchVideos: SearchVideos
     }
     fun submit(q: String = _state.value.query) {
         val query = q.trim(); if (query.isEmpty()) return
+        interests.recordSearch(query)
         _state.value = _state.value.copy(query = query, suggestions = emptyList())
         searchJob?.cancel()
         searchJob = searchVideos(query, _state.value.shortsOnly).onEach { _state.value = _state.value.copy(results = it) }.launchIn(viewModelScope)

@@ -10,6 +10,6 @@ interface VideoRepository {
     suspend fun channelLatest(ucid: String): Result<List<VideoSummary>>
 }
 enum class HomeCategory(val apiType: String?, val searchFallback: String?) {
-    ALL(null, null), MUSIC("music", null), GAMING("gaming", null),
+    FOR_YOU(null, null), ALL(null, null), MUSIC("music", null), GAMING("gaming", null),
     MIX(null, "musik mix"), NEWS(null, "berita terkini"), LEARN(null, "belajar")
 }
