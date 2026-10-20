@@ -23,6 +23,7 @@ import com.app.youtubego.presentation.theme.YgMuted
 fun SubscriptionsScreen(
     onExplore: () -> Unit,
     onVideoClick: (String) -> Unit,
+    onChannelClick: (String) -> Unit = {},
     vm: SubscriptionsViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsState()
@@ -77,7 +78,7 @@ fun SubscriptionsScreen(
                             YgSectionHeader("Terbaru dari channel", "Video dari channel yang kamu ikuti")
                         }
                         items(videos.data, key = { it.id }, contentType = { "video" }) { video ->
-                            VideoCardPro(video = video, onClick = onVideoClick)
+                            VideoCardPro(video = video, onClick = onVideoClick, onChannelClick = onChannelClick)
                         }
                     }
                 }

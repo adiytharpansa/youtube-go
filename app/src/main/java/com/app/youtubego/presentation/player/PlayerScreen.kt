@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -66,7 +67,7 @@ import com.app.youtubego.presentation.theme.YgMuted
 import com.app.youtubego.presentation.theme.YgSurfaceVariant
 import kotlinx.coroutines.delay
 
-private enum class PlayerSheet { SETTINGS, COMMENTS, DESCRIPTION }
+private enum class PlayerSheet { SETTINGS, COMMENTS, DESCRIPTION, PLAYLISTS }
 private val SPEEDS = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
 
 /**
@@ -78,7 +79,7 @@ private val SPEEDS = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
  */
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
-fun PlayerScreen(videoId: String, onBack: () -> Unit, onVideoClick: (String) -> Unit, vm: PlayerViewModel = hiltViewModel()) {
+fun PlayerScreen(videoId: String, onBack: () -> Unit, onVideoClick: (String) -> Unit, onChannelClick: (String) -> Unit = {}, vm: PlayerViewModel = hiltViewModel()) {
     val state by vm.state.collectAsState()
     val device by vm.device.collectAsState()
     val deviceSettled by vm.deviceSettled.collectAsState()
@@ -87,6 +88,8 @@ fun PlayerScreen(videoId: String, onBack: () -> Unit, onVideoClick: (String) -> 
     val savedIds by vm.saved.collectAsState()
     val subscribedIds by vm.subscribed.collectAsState()
     val autoplay by vm.autoplay.collectAsState()
+    val downloadMessage by vm.downloadMessage.collectAsState()
+    val playlists by vm.playlists.collectAsState()
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -318,12 +321,14 @@ fun PlayerScreen(videoId: String, onBack: () -> Unit, onVideoClick: (String) -> 
                         val subscribed = d.summary.authorId in subscribedIds
                         LazyColumn(Modifier.fillMaxSize()) {
                             item { TitleBlock(d) { sheet = PlayerSheet.DESCRIPTION } }
-                            item { ChannelRow(d, subscribed) { vm.toggleSubscribe(d.summary.authorId) } }
+                            item { ChannelRow(d, subscribed, onChannelClick) { vm.toggleSubscribe(d.summary.authorId) } }
                             item {
                                 ActionRow(
                                     likeLabel = if (d.likeCount + (if (liked) 1 else 0) > 0) formatViewsId(d.likeCount + (if (liked) 1 else 0)) else "Suka",
                                     liked = liked, saved = saved,
                                     onLike = vm::toggleLike, onSave = vm::toggleSave,
+                                    onDownload = vm::downloadCurrent,
+                                    onPlaylist = { sheet = PlayerSheet.PLAYLISTS },
                                     onShare = {
                                         val send = Intent(Intent.ACTION_SEND).apply {
                                             type = "text/plain"; putExtra(Intent.EXTRA_TEXT, "${d.summary.title}\nhttps://youtu.be/$videoId")
@@ -331,6 +336,17 @@ fun PlayerScreen(videoId: String, onBack: () -> Unit, onVideoClick: (String) -> 
                                         context.startActivity(Intent.createChooser(send, "Bagikan video"))
                                     },
                                 )
+                            }
+                            downloadMessage?.let { message ->
+                                item {
+                                    Row(
+                                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(message, color = YgMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                                        TextButton(onClick = vm::dismissDownloadMessage) { Text("Tutup") }
+                                    }
+                                }
                             }
                             item { CommentsTeaser(comments) { sheet = PlayerSheet.COMMENTS } }
                             item {
@@ -341,11 +357,17 @@ fun PlayerScreen(videoId: String, onBack: () -> Unit, onVideoClick: (String) -> 
                                         colors = SwitchDefaults.colors(checkedTrackColor = YtRed))
                                 }
                             }
-                            items(d.recommendations, key = { it.id }) { v -> VideoCardPro(v, onVideoClick) }
+                            items(d.recommendations, key = { it.id }) { v -> VideoCardPro(v, onVideoClick, onChannelClick = onChannelClick) }
                         }
                         when (sheet) {
                             PlayerSheet.COMMENTS -> CommentsSheet(comments) { sheet = null }
                             PlayerSheet.DESCRIPTION -> DescriptionSheet(d) { sheet = null }
+                            PlayerSheet.PLAYLISTS -> PlaylistPickerSheet(
+                                playlists = playlists,
+                                onPick = { id -> vm.addToPlaylist(id); sheet = null },
+                                onCreate = { name -> vm.createPlaylistWithCurrentVideo(name); sheet = null },
+                                onDismiss = { sheet = null }
+                            )
                             else -> Unit
                         }
                     }
@@ -371,8 +393,13 @@ private fun TitleBlock(d: VideoDetail, onMore: () -> Unit) {
 }
 
 @Composable
-private fun ChannelRow(d: VideoDetail, subscribed: Boolean, onSubscribe: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun ChannelRow(d: VideoDetail, subscribed: Boolean, onChannelClick: (String) -> Unit, onSubscribe: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth()
+            .clickable(enabled = d.summary.authorId.isNotBlank()) { onChannelClick(d.summary.authorId) }
+            .padding(horizontal = 14.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         AsyncImage(d.summary.authorAvatarUrl, null, contentScale = ContentScale.Crop, modifier = Modifier.size(40.dp).clip(CircleShape).background(YgSurfaceVariant))
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(d.summary.author, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -387,11 +414,13 @@ private fun ChannelRow(d: VideoDetail, subscribed: Boolean, onSubscribe: () -> U
 }
 
 @Composable
-private fun ActionRow(likeLabel: String, liked: Boolean, saved: Boolean, onLike: () -> Unit, onSave: () -> Unit, onShare: () -> Unit) {
+private fun ActionRow(likeLabel: String, liked: Boolean, saved: Boolean, onLike: () -> Unit, onSave: () -> Unit, onDownload: () -> Unit, onPlaylist: () -> Unit, onShare: () -> Unit) {
     LazyRow(contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         item { ActionPill(if (liked) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp, likeLabel, liked, onLike) }
         item { ActionPill(Icons.Filled.Share, "Bagikan", false, onShare) }
         item { ActionPill(if (saved) Icons.Filled.WatchLater else Icons.Outlined.WatchLater, if (saved) "Tersimpan" else "Simpan", saved, onSave) }
+        item { ActionPill(Icons.Filled.Download, "Unduh", false, onDownload) }
+        item { ActionPill(Icons.AutoMirrored.Filled.PlaylistPlay, "Playlist", false, onPlaylist) }
     }
 }
 

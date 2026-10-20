@@ -47,6 +47,7 @@ fun LibraryScreen(
     val liked by vm.liked.collectAsState()
     val subscribed by vm.subscribed.collectAsState()
     val autoplay by vm.autoplay.collectAsState()
+    val playlists by vm.playlists.collectAsState()
 
     LazyColumn(
         Modifier.fillMaxSize().background(YgBackground).statusBarsPadding(),
@@ -106,7 +107,7 @@ fun LibraryScreen(
         item { LibraryTile(LibraryItem.WATCH_LATER, "${saved.size} video", onItemClick) }
         item { LibraryTile(LibraryItem.LIKED, "${liked.size} video", onItemClick) }
         item { LibraryTile(LibraryItem.DOWNLOADS, "Belum tersedia", onItemClick) }
-        item { LibraryTile(LibraryItem.PLAYLISTS, "Belum tersedia", onItemClick) }
+        item { LibraryTile(LibraryItem.PLAYLISTS, "${playlists.size} playlist lokal", onItemClick) }
         item {
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f).height(1.dp).background(YgDivider))

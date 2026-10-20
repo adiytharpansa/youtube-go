@@ -2,6 +2,8 @@ package com.app.youtubego.presentation.player
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.app.youtubego.data.local.OfflineDownloadsRepository
+import com.app.youtubego.data.local.PlaylistStore
 import com.app.youtubego.data.local.UserLibraryStore
 import com.app.youtubego.data.newpipe.DevicePlayback
 import com.app.youtubego.data.newpipe.DeviceStreamSource
@@ -29,6 +31,8 @@ class PlayerViewModel @Inject constructor(
     private val deviceSource: DeviceStreamSource,
     private val interests: InterestRepository,
     private val library: UserLibraryStore,
+    private val downloads: OfflineDownloadsRepository,
+    private val playlistStore: PlaylistStore,
 ) : ViewModel() {
     private val videoId: String = checkNotNull(savedState["videoId"])
     private val _state = MutableStateFlow<UiState<VideoDetail>>(UiState.Loading)
@@ -45,6 +49,9 @@ class PlayerViewModel @Inject constructor(
     val saved: StateFlow<Set<String>> = library.saved
     val subscribed: StateFlow<Set<String>> = library.subscribed
     val autoplay: StateFlow<Boolean> = library.autoplay
+    val playlists = playlistStore.playlists
+    private val _downloadMessage = MutableStateFlow<String?>(null)
+    val downloadMessage: StateFlow<String?> = _downloadMessage.asStateFlow()
     private var job: Job? = null
     private var deviceJob: Job? = null
     private var commentsJob: Job? = null
@@ -64,6 +71,32 @@ class PlayerViewModel @Inject constructor(
     fun toggleSave() = library.toggleSaved(videoId)
     fun toggleSubscribe(channelId: String) = library.toggleSubscribed(channelId)
     fun setAutoplay(on: Boolean) = library.setAutoplay(on)
+    fun downloadCurrent() {
+        val video = (_state.value as? UiState.Success)?.data?.summary
+        if (video == null) {
+            _downloadMessage.value = "Tunggu sampai informasi video selesai dimuat."
+            return
+        }
+        viewModelScope.launch {
+            _downloadMessage.value = "Menyiapkan unduhan…"
+            val result = downloads.enqueue(video)
+            _downloadMessage.value = result.fold(
+                onSuccess = { if (it) "Unduhan dimulai." else "Video ini sudah ada dalam daftar unduhan." },
+                onFailure = { it.message?.takeIf { message -> message.isNotBlank() } ?: "Unduhan gagal dimulai." }
+            )
+        }
+    }
+    fun dismissDownloadMessage() { _downloadMessage.value = null }
+    fun addToPlaylist(playlistId: String) {
+        playlistStore.addVideo(playlistId, videoId)
+        _downloadMessage.value = "Video ditambahkan ke playlist."
+    }
+    fun createPlaylistWithCurrentVideo(name: String): String? {
+        val id = playlistStore.create(name) ?: return null
+        playlistStore.addVideo(id, videoId)
+        _downloadMessage.value = "Playlist dibuat dan video ditambahkan."
+        return id
+    }
     private fun load() {
         job?.cancel()
         deviceJob?.cancel()

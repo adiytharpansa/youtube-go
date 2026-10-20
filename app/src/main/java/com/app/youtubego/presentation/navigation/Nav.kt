@@ -33,9 +33,13 @@ import androidx.navigation.navArgument
 import com.app.youtubego.presentation.common.EmptyState
 import com.app.youtubego.presentation.home.HomeScreen
 import com.app.youtubego.presentation.home.ShortsScreen
+import com.app.youtubego.presentation.library.ChannelScreen
+import com.app.youtubego.presentation.library.DownloadsScreen
 import com.app.youtubego.presentation.library.CollectionScreen
 import com.app.youtubego.presentation.library.LibraryItem
 import com.app.youtubego.presentation.library.LibraryScreen
+import com.app.youtubego.presentation.library.PlaylistDetailScreen
+import com.app.youtubego.presentation.library.PlaylistsScreen
 import com.app.youtubego.presentation.library.SettingsScreen
 import com.app.youtubego.presentation.library.SubscriptionsScreen
 import com.app.youtubego.presentation.player.PlayerScreen
@@ -45,7 +49,7 @@ import com.app.youtubego.presentation.theme.*
 object Routes {
     const val HOME = "home"; const val SEARCH = "search"; const val PLAYER = "player/{videoId}"
     const val SHORTS = "shorts"; const val SUBS = "subs"; const val YOU = "you"
-    const val COLLECTION = "collection/{kind}"; const val SETTINGS = "settings"
+    const val COLLECTION = "collection/{kind}"; const val SETTINGS = "settings"; const val CHANNEL = "channel/{ucid}"; const val DOWNLOADS = "downloads"; const val PLAYLISTS = "playlists"; const val PLAYLIST_DETAIL = "playlist/{playlistId}"
 }
 
 private data class Tab(val route: String, val label: String, val off: ImageVector, val on: ImageVector)
@@ -63,6 +67,7 @@ fun YoutubeGoNavHost() {
     val dest = nav.currentBackStackEntryAsState().value?.destination
     val showBar = tabs.any { t -> dest?.hierarchy?.any { it.route == t.route } == true }
     val openPlayer: (String) -> Unit = { nav.navigate("player/$it") }
+    val openChannel: (String) -> Unit = { nav.navigate("channel/$it") }
 
     Scaffold(
         containerColor = YgBackground,
@@ -104,27 +109,42 @@ fun YoutubeGoNavHost() {
             startDestination = Routes.HOME,
             modifier = Modifier.padding(bottom = pad.calculateBottomPadding())
         ) {
-            composable(Routes.HOME) { HomeScreen(onVideoClick = openPlayer, onSearchClick = { nav.navigate(Routes.SEARCH) }) }
+            composable(Routes.HOME) { HomeScreen(onVideoClick = openPlayer, onSearchClick = { nav.navigate(Routes.SEARCH) }, onChannelClick = openChannel) }
             composable(Routes.SHORTS) { ShortsScreen(onVideoClick = openPlayer) }
             composable(Routes.SUBS) {
                 SubscriptionsScreen(
                     onExplore = { nav.navigate(Routes.HOME) { launchSingleTop = true } },
-                    onVideoClick = openPlayer
+                    onVideoClick = openPlayer,
+                    onChannelClick = openChannel
                 )
             }
             composable(Routes.YOU) {
                 LibraryScreen(onItemClick = { item ->
-                    if (item == LibraryItem.SETTINGS) nav.navigate(Routes.SETTINGS)
-                    else nav.navigate("collection/${item.key}")
+                    when (item) {
+                        LibraryItem.SETTINGS -> nav.navigate(Routes.SETTINGS)
+                        LibraryItem.DOWNLOADS -> nav.navigate(Routes.DOWNLOADS)
+                        LibraryItem.PLAYLISTS -> nav.navigate(Routes.PLAYLISTS)
+                        else -> nav.navigate("collection/${item.key}")
+                    }
                 })
             }
             composable(Routes.COLLECTION, arguments = listOf(navArgument("kind") { type = NavType.StringType })) {
-                CollectionScreen(onBack = { nav.popBackStack() }, onVideoClick = openPlayer)
+                CollectionScreen(onBack = { nav.popBackStack() }, onVideoClick = openPlayer, onChannelClick = openChannel)
             }
             composable(Routes.SETTINGS) { SettingsScreen(onBack = { nav.popBackStack() }) }
-            composable(Routes.SEARCH) { SearchScreen(onBack = { nav.popBackStack() }, onVideoClick = openPlayer) }
+            composable(Routes.DOWNLOADS) { DownloadsScreen(onBack = { nav.popBackStack() }) }
+            composable(Routes.PLAYLISTS) {
+                PlaylistsScreen(onBack = { nav.popBackStack() }, onOpen = { id -> nav.navigate("playlist/$id") })
+            }
+            composable(Routes.PLAYLIST_DETAIL, arguments = listOf(navArgument("playlistId") { type = NavType.StringType })) {
+                PlaylistDetailScreen(onBack = { nav.popBackStack() }, onVideoClick = openPlayer)
+            }
+            composable(Routes.SEARCH) { SearchScreen(onBack = { nav.popBackStack() }, onVideoClick = openPlayer, onChannelClick = openChannel) }
             composable(Routes.PLAYER, arguments = listOf(navArgument("videoId") { type = NavType.StringType })) { entry ->
-                PlayerScreen(videoId = entry.arguments?.getString("videoId").orEmpty(), onBack = { nav.popBackStack() }, onVideoClick = openPlayer)
+                PlayerScreen(videoId = entry.arguments?.getString("videoId").orEmpty(), onBack = { nav.popBackStack() }, onVideoClick = openPlayer, onChannelClick = openChannel)
+            }
+            composable(Routes.CHANNEL, arguments = listOf(navArgument("ucid") { type = NavType.StringType })) {
+                ChannelScreen(onBack = { nav.popBackStack() }, onVideoClick = openPlayer)
             }
         }
     }

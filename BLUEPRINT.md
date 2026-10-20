@@ -142,17 +142,17 @@ teks `#F3F4F6`, teks redup `#9AA0AB`, aksen primer `#FF2E4D`, aksen sekunder `#F
 4. Tanpa autoplay video di Beranda (hanya gambar diam); Shorts memuat detail hanya saat slide aktif (pola IntersectionObserver web diterjemahkan ke pager tahap 2).
 5. Semua panggilan berbatas waktu tegas (connect 15 dtk, read 25 dtk) — tidak ada panggilan tanpa batas waktu.
 
-## 10. Yang Belum Ada — Peta Jalan Tahap 2 (jujur, belum diklaim selesai)
+## 10. Status Fitur Lanjutan
 
-- Shorts: pager vertikal (`VerticalPager`) memakai `/search?duration=short` — use case & parameternya sudah siap.
-- DASH adaptif dari `dashUrl` + pemilih kualitas manual di pemutar.
-- Akun lokal persisten: langganan/riwayat/Tonton Nanti/Disukai dengan DataStore/Room (di web: `localStorage yg_*`) + layar Subscription/Anda/Notifikasi seperti web.
-- Unduhan resmi Media3 `DownloadManager` dari `formatStreams` (di web: unduh berkas asli).
-- Subtitle: trek `captions[]` dipasang sebagai `MediaItem.SubtitleConfiguration` (DTO & mapper sudah menyediakan URL-nya).
-- PiP + putar latar via `media3-session` (dependensi sudah terpasang).
-- Komentar: endpoint & DTO sudah ada (`comments()` di repository), layar komentar belum dibuat.
-- Gradle Wrapper belum dibuat di VM ini (tidak ada Gradle/SDK lokal) — workflow Actions memakai Gradle 8.10.2 dari `setup-gradle`; wrapper bisa dibuat sekali dari Android Studio/CI bila diinginkan.
-- **Kode kerangka ini belum dikompilasi** saat blueprint ditulis (tidak ada toolchain Android di lingkungan agen). Verifikasi pertamanya adalah menjalankan workflow **Build Debug APK** (`workflow_dispatch`) di repo ini; perbaikan kompilasi mengikuti hasil run itu.
+- **Shorts MVP:** pager vertikal memakai `/search?duration=short`; halaman aktif mencoba memutar stream progresif langsung di perangkat lewat NewPipeExtractor. Jika ekstraksi gagal, pengguna tetap bisa membuka pemutar utama. Belum ada rekomendasi berbasis perilaku untuk feed Shorts.
+- **Channel & langganan:** halaman channel memakai endpoint Invidious, tombol mengikuti menyimpan ID lokal, dan feed Langganan menggabungkan video terbaru hingga 25 channel (maks. 5 permintaan paralel).
+- **Koleksi lokal:** suka, Tonton nanti, langganan, putar otomatis, riwayat (maks. 100 video), serta metadata ringkas disimpan di SharedPreferences. Daftar riwayat/suka/simpan bisa dibuka dan item bisa dihapus.
+- **Playlist lokal:** buat/hapus playlist, tambahkan video dari pemutar, dan hapus video dari detail playlist. Playlist hanya ada di perangkat ini.
+- **Unduhan offline:** Android `DownloadManager` mengambil stream progresif yang diekstrak di perangkat, menyimpan di direktori Movies app-specific, menampilkan status/progres, dan membuka hasil melalui aplikasi pemutar eksternal. Unduhan HLS/DASH tidak didukung.
+- **Pengaturan:** sakelar putar otomatis tersedia; pilihan kualitas tetap di panel pemutar.
+- **Komentar, subtitle, fullscreen, PiP, kecepatan dan pemilihan kualitas** sudah tersedia di pemutar. Putar latar stabil melalui `media3-session` belum disiapkan.
+- Belum ada Gradle Wrapper atau Android SDK lokal di lingkungan ini. Workflow Actions memakai Gradle 8.10.2, tetapi workflow build harus dijalankan dari GitHub Actions untuk verifikasi APK.
+- Build APK belum diverifikasi pada perubahan fitur terbaru; dispatch workflow dari sesi ini dibatasi izin GitHub (HTTP 403).
 
 ## 11. Build & Rilis
 

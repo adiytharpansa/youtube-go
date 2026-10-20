@@ -27,6 +27,7 @@ import com.app.youtubego.presentation.theme.YgMuted
 fun CollectionScreen(
     onBack: () -> Unit,
     onVideoClick: (String) -> Unit,
+    onChannelClick: (String) -> Unit = {},
     vm: CollectionViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsState()
@@ -85,6 +86,7 @@ fun CollectionScreen(
                     VideoCardPro(
                         video = video,
                         onClick = onVideoClick,
+                        onChannelClick = onChannelClick,
                         actions = listOf(
                             VideoAction(
                                 label = if (state.title == "Riwayat tontonan") "Hapus dari riwayat" else "Hapus dari koleksi",

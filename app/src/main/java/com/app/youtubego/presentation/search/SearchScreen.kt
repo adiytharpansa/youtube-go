@@ -32,6 +32,7 @@ import com.app.youtubego.presentation.theme.*
 fun SearchScreen(
     onBack: () -> Unit,
     onVideoClick: (String) -> Unit,
+    onChannelClick: (String) -> Unit = {},
     vm: SearchViewModel = hiltViewModel()
 ) {
     val state by vm.state.collectAsState()
@@ -160,7 +161,7 @@ fun SearchScreen(
                     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 12.dp, bottom = 20.dp)) {
                         item { YgSectionHeader("Hasil untuk ‘${state.query}’", "${result.data.size} video ditemukan") }
                         items(result.data, key = { it.id }, contentType = { "video" }) { video ->
-                            VideoCardPro(video, onVideoClick)
+                            VideoCardPro(video, onVideoClick, onChannelClick = onChannelClick)
                         }
                     }
                 }

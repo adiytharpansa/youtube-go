@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.app.youtubego.domain.model.CommentItem
+import com.app.youtubego.data.local.LocalPlaylist
 import com.app.youtubego.domain.model.VideoDetail
 import com.app.youtubego.presentation.common.UiState
 import com.app.youtubego.presentation.common.formatRelativeTime
@@ -141,5 +143,51 @@ private fun Stat(value: String, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(value, fontWeight = FontWeight.Bold)
         Text(label, color = YgMuted, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+/** Pilih playlist lokal atau buat playlist baru sambil menyimpan video aktif. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun PlaylistPickerSheet(
+    playlists: List<LocalPlaylist>,
+    onPick: (String) -> Unit,
+    onCreate: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = YgSurface) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
+            Text("Simpan ke playlist", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            if (playlists.isEmpty()) {
+                Text("Belum ada playlist. Buat satu untuk menyimpan video ini.", color = YgMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp, bottom = 10.dp))
+            } else {
+                Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState())) {
+                    playlists.forEach { playlist ->
+                        ListItem(
+                            headlineContent = { Text(playlist.name) },
+                            supportingContent = { Text("${playlist.videoIds.size} video", color = YgMuted) },
+                            leadingContent = { Icon(Icons.AutoMirrored.Filled.PlaylistPlay, null, tint = YtRed) },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                            modifier = Modifier.clickable { onPick(playlist.id) }
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it.take(60) },
+                singleLine = true,
+                label = { Text("Nama playlist baru") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Button(
+                onClick = { onCreate(name); name = "" },
+                enabled = name.isNotBlank(),
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
+            ) { Text("Buat dan simpan") }
+            Spacer(Modifier.height(8.dp))
+        }
     }
 }

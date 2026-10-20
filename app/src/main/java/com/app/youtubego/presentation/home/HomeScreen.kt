@@ -48,6 +48,7 @@ private fun catLabel(cat: HomeCategory): String = when (cat) {
 fun HomeScreen(
     onVideoClick: (String) -> Unit,
     onSearchClick: () -> Unit,
+    onChannelClick: (String) -> Unit = {},
     vm: HomeViewModel = hiltViewModel()
 ) {
     val state by vm.state.collectAsState()
@@ -129,7 +130,7 @@ fun HomeScreen(
                             contentPadding = PaddingValues(top = 12.dp, bottom = 12.dp)
                         ) {
                             items(s.data, key = { it.id }, contentType = { "video" }) { v ->
-                                VideoCardPro(video = v, onClick = onVideoClick)
+                                VideoCardPro(video = v, onClick = onVideoClick, onChannelClick = onChannelClick)
                             }
                             item {
                                 // Footer halus
