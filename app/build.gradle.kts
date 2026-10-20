@@ -20,7 +20,7 @@ android {
         release { isMinifyEnabled = true; isShrinkResources = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") }
         debug { isMinifyEnabled = false }
     }
-    compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
+    compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17; isCoreLibraryDesugaringEnabled = true }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
     packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
@@ -55,4 +55,7 @@ dependencies {
     implementation("androidx.media3:media3-session:1.5.0")
     // Coil (cache hemat data)
     implementation("io.coil-kt:coil-compose:2.7.0")
+    // NewPipeExtractor: ekstraksi stream YouTube DI PERANGKAT (IP pengguna), jalur putar utama spike.
+    implementation("com.github.teamnewpipe:NewPipeExtractor:v0.26.5")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }

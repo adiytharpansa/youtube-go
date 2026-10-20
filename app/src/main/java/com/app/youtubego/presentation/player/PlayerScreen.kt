@@ -48,6 +48,8 @@ import kotlinx.coroutines.delay
 @Composable
 fun PlayerScreen(videoId: String, onBack: () -> Unit, onVideoClick: (String) -> Unit, vm: PlayerViewModel = hiltViewModel()) {
     val state by vm.state.collectAsState()
+    val device by vm.device.collectAsState()
+    val deviceSettled by vm.deviceSettled.collectAsState()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var isFullscreen by remember { mutableStateOf(false) }
@@ -121,20 +123,28 @@ fun PlayerScreen(videoId: String, onBack: () -> Unit, onVideoClick: (String) -> 
                 is UiState.Error -> ErrorBox(s.message) { vm.retry() }
                 is UiState.Success -> {
                     val d = s.data
-                    // Siapkan media SEKALI per set URL segar: utamakan stream gabungan
-                    // terendah (hemat data), cadangan DASH adaptif (manifest lewat proksi,
-                    // segmennya dialirkan jalur videoplayback), lalu HLS. Bila ketiganya
-                    // kosong dari server, tampilkan sebab sebenarnya — jangan diam.
-                    LaunchedEffect(d.combinedStreams.firstOrNull()?.url, d.dashUrl, d.hlsUrl) {
+                    // Siapkan media SEKALI per set URL segar, menunggu ekstraksi perangkat
+                    // selesai lebih dulu. Urutan putar: DASH hasil ekstraksi perangkat
+                    // (adaptif, batas TrackSelector tetap berlaku), stream gabungan
+                    // perangkat, HLS perangkat, lalu cadangan jalur server: gabungan,
+                    // DASH, HLS. Bila semua kosong, tampilkan sebab sebenarnya — jangan diam.
+                    LaunchedEffect(deviceSettled, device?.dashUrl, device?.combined?.firstOrNull()?.url, device?.hlsUrl, d.combinedStreams.firstOrNull()?.url, d.dashUrl, d.hlsUrl) {
+                        if (!deviceSettled) return@LaunchedEffect
+                        val devDash = device?.dashUrl
+                        val devCombined = device?.combined?.firstOrNull()?.url
+                        val devHls = device?.hlsUrl
                         val combined = d.combinedStreams.firstOrNull()?.url
                         val item = when {
+                            !devDash.isNullOrBlank() -> MediaItem.Builder().setUri(devDash).setMimeType(MimeTypes.APPLICATION_MPD).build()
+                            !devCombined.isNullOrBlank() -> MediaItem.fromUri(devCombined)
+                            !devHls.isNullOrBlank() -> MediaItem.Builder().setUri(devHls).setMimeType(MimeTypes.APPLICATION_M3U8).build()
                             !combined.isNullOrBlank() -> MediaItem.fromUri(combined)
                             !d.dashUrl.isNullOrBlank() -> MediaItem.Builder().setUri(d.dashUrl).setMimeType(MimeTypes.APPLICATION_MPD).build()
                             !d.hlsUrl.isNullOrBlank() -> MediaItem.Builder().setUri(d.hlsUrl).setMimeType(MimeTypes.APPLICATION_M3U8).build()
                             else -> null
                         }
                         if (item != null) { player.setMediaItem(item); player.prepare(); player.playWhenReady = true }
-                        else playerError = "Server tidak menyediakan format putar untuk video ini — format gabungan, DASH, dan HLS semuanya kosong. Coba lagi nanti atau pilih video lain."
+                        else playerError = "Format putar untuk video ini sedang tidak tersedia dari jalur mana pun. Coba lagi nanti atau pilih video lain."
                     }
                     LazyColumn(Modifier.fillMaxSize()) {
                         item {
