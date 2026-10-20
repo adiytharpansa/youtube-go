@@ -38,11 +38,3 @@ interface InvidiousApi {
 }
 @kotlinx.serialization.Serializable
 data class CaptionListHolder(val captions: List<CaptionDto> = emptyList())
-/** Hasil /search campuran: video/playlist/channel dalam satu array - pisahkan lewat [type]. */
-@kotlinx.serialization.Serializable
-data class SearchItemDto(
-    val type: String = "video", val videoId: String = "", val playlistId: String = "",
-    val title: String = "", val author: String = "", val authorId: String = "",
-    val videoThumbnails: List<ThumbnailDto> = emptyList(),
-    val lengthSeconds: Long = 0, val viewCount: Long = 0, val published: Long = 0, val liveNow: Boolean = false,
-)
