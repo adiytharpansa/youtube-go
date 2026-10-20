@@ -15,7 +15,7 @@ import com.app.youtubego.presentation.common.*
 @Composable
 fun SearchScreen(onBack: () -> Unit, onVideoClick: (String) -> Unit, vm: SearchViewModel = hiltViewModel()) {
     val state by vm.state.collectAsState()
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali") }
             OutlinedTextField(
@@ -35,7 +35,8 @@ fun SearchScreen(onBack: () -> Unit, onVideoClick: (String) -> Unit, vm: SearchV
         when (val s = state.results) {
             is UiState.Loading -> LazyColumn { items(4) { VideoCardShimmer() } }
             is UiState.Error -> ErrorBox(s.message) { vm.submit() }
-            is UiState.Success -> LazyColumn(Modifier.fillMaxSize()) { items(s.data, key = { it.id }) { v -> VideoCard(v, onVideoClick) } }
+            is UiState.Success -> LazyColumn(Modifier.fillMaxSize()) { items(s.data, key = { it.id }) { v -> VideoCardPro(v, onVideoClick) } }
         }
     }
 }
+

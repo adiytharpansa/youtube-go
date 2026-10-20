@@ -22,6 +22,7 @@ fun HomeScreen(onVideoClick: (String) -> Unit, onSearchClick: () -> Unit, vm: Ho
     val state by vm.state.collectAsState()
     val listState = rememberLazyListState()
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = { Text("YouTube GO", fontWeight = FontWeight.ExtraBold) },
@@ -48,10 +49,11 @@ fun HomeScreen(onVideoClick: (String) -> Unit, onSearchClick: () -> Unit, vm: Ho
                 } else {
                     // key stabil + contentType: kunci scroll halus & reuse komposisi di daftar panjang.
                     LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                        items(s.data, key = { it.id }, contentType = { "video" }) { v -> VideoCard(v, onVideoClick) }
+                        items(s.data, key = { it.id }, contentType = { "video" }) { v -> VideoCardPro(v, onVideoClick) }
                     }
                 }
             }
         }
     }
 }
+
