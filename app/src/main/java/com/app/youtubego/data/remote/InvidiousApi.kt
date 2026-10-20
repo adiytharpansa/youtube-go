@@ -5,7 +5,7 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 /**
  * Retrofit interface - 1:1 dengan dokumen Invidious API (publik, tanpa login).
- * Endpoint /auth/* SENGAJA tidak dipasang: aplikasi memakai akun lokal seperti web app,
+ * Grup endpoint auth SENGAJA tidak dipasang: aplikasi memakai akun lokal seperti web app,
  * API publik tidak menyediakan login pengguna akhir yang aman untuk aplikasi ini.
  */
 interface InvidiousApi {

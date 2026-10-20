@@ -5,7 +5,7 @@ package com.app.youtubego.data.remote
  *
  * KEPUTUSAN PRODUKSI (terverifikasi di web app):
  * - BASE_URL menunjuk proksi Vercel YouTube GO yang SUDAH LIVE, bukan instance langsung.
- *   Alasan: /api/v1 memang dikecualikan anti-bot Anubis, TETAPI /vi/* (thumbnail) dan
+ *   Alasan: /api/v1 memang dikecualikan anti-bot Anubis, TETAPI /vi (thumbnail) dan
  *   /videoplayback (stream) DIPAGARI Anubis (halaman tantangan PoW, bukan gambar/video).
  *   Proksi itu memecahkan PoW di satu soket yang sama lalu meneruskan Range (206) -
  *   Coil & ExoPlayer tidak bisa memecahkan PoW sendiri.

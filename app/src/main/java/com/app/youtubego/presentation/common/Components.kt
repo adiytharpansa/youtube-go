@@ -68,7 +68,12 @@ fun VideoCard(video: VideoSummary, onClick: (String) -> Unit) {
     }
 }
 fun formatDuration(sec: Long): String { if (sec <= 0) return "0:00"; val h = sec / 3600; val m = (sec % 3600) / 60; val s = sec % 60; return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s) }
-fun formatViews(n: Long): String = when { n >= 1_000_000_000 -> "%.1f M".format(n / 1e9); n >= 1_000_000 -> "%.1f jt".format(n / 1e6); n >= 1_000 -> "%.1f rb".format(n / 1e3); else n.toString() }
+fun formatViews(n: Long): String = when {
+    n >= 1_000_000_000 -> "%.1f M".format(n / 1e9)
+    n >= 1_000_000 -> "%.1f jt".format(n / 1e6)
+    n >= 1_000 -> "%.1f rb".format(n / 1e3)
+    else -> n.toString()
+}
 @Composable
 fun ErrorBox(message: String, onRetry: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
