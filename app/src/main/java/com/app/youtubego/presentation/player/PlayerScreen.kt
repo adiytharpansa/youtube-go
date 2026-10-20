@@ -27,6 +27,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -73,7 +74,16 @@ fun PlayerScreen(videoId: String, onBack: () -> Unit, onVideoClick: (String) -> 
     var playerError by remember(videoId) { mutableStateOf<String?>(null) }
     DisposableEffect(player) {
         val l = object : Player.Listener {
-            override fun onPlayerError(error: PlaybackException) { playerError = "Video gagal diputar. Coba lagi." }
+            override fun onPlayerError(error: PlaybackException) {
+                playerError = when (error.errorCode) {
+                    PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ->
+                        "Aliran video gagal diambil dari server (galat HTTP). Server video mungkin sedang bermasalah — coba lagi sebentar."
+                    PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+                    PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ->
+                        "Koneksi ke server video terputus atau terlalu lambat. Coba lagi."
+                    else -> "Video gagal diputar (${error.errorCodeName}). Coba lagi."
+                }
+            }
         }
         player.addListener(l)
         onDispose { player.removeListener(l) }
@@ -101,20 +111,30 @@ fun PlayerScreen(videoId: String, onBack: () -> Unit, onVideoClick: (String) -> 
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(msg, color = Color.White)
-                    TextButton(onClick = { playerError = null; player.prepare(); player.play() }) { Text("Coba lagi") }
+                    TextButton(onClick = { playerError = null; vm.retry() }) { Text("Coba lagi") }
                 }
             }
         }
         if (!isFullscreen) {
             when (val s = state) {
                 is UiState.Loading -> Column { VideoCardShimmer() }
-                is UiState.Error -> ErrorBox(s.message) { onBack() }
+                is UiState.Error -> ErrorBox(s.message) { vm.retry() }
                 is UiState.Success -> {
                     val d = s.data
-                    // Siapkan media SEKALI saat detail tiba: utamakan stream gabungan terendah, cadangan HLS.
-                    LaunchedEffect(d.summary.id) {
-                        val url = d.combinedStreams.firstOrNull()?.url ?: d.hlsUrl.orEmpty()
-                        if (url.isNotBlank()) { player.setMediaItem(MediaItem.fromUri(url)); player.prepare(); player.playWhenReady = true }
+                    // Siapkan media SEKALI per set URL segar: utamakan stream gabungan
+                    // terendah (hemat data), cadangan DASH adaptif (manifest lewat proksi,
+                    // segmennya dialirkan jalur videoplayback), lalu HLS. Bila ketiganya
+                    // kosong dari server, tampilkan sebab sebenarnya — jangan diam.
+                    LaunchedEffect(d.combinedStreams.firstOrNull()?.url, d.dashUrl, d.hlsUrl) {
+                        val combined = d.combinedStreams.firstOrNull()?.url
+                        val item = when {
+                            !combined.isNullOrBlank() -> MediaItem.fromUri(combined)
+                            !d.dashUrl.isNullOrBlank() -> MediaItem.Builder().setUri(d.dashUrl).setMimeType(MimeTypes.APPLICATION_MPD).build()
+                            !d.hlsUrl.isNullOrBlank() -> MediaItem.Builder().setUri(d.hlsUrl).setMimeType(MimeTypes.APPLICATION_M3U8).build()
+                            else -> null
+                        }
+                        if (item != null) { player.setMediaItem(item); player.prepare(); player.playWhenReady = true }
+                        else playerError = "Server tidak menyediakan format putar untuk video ini — format gabungan, DASH, dan HLS semuanya kosong. Coba lagi nanti atau pilih video lain."
                     }
                     LazyColumn(Modifier.fillMaxSize()) {
                         item {

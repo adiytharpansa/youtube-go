@@ -28,7 +28,12 @@ class GetVideoDetailUseCase @Inject constructor(private val repo: VideoRepositor
     }
 }
 fun Throwable.toFriendlyMessage(): String = when (this) {
-    is java.io.IOException -> "Tidak ada koneksi. Periksa internet lalu coba lagi."
-    is retrofit2.HttpException -> if (code() >= 500) "Server sedang bermasalah. Coba lagi sebentar." else "Video tidak tersedia."
+    is java.net.SocketTimeoutException -> "Server video terlalu lambat merespons. Coba lagi sebentar."
+    is java.io.IOException -> "Tidak ada koneksi ke server. Periksa internet lalu coba lagi."
+    is retrofit2.HttpException -> when {
+        code() >= 500 -> "Server video sedang bermasalah (galat ${code()}). Coba lagi sebentar."
+        code() == 404 -> "Video tidak tersedia atau sudah dihapus."
+        else -> "Permintaan ditolak server (galat ${code()})."
+    }
     else -> "Gagal memuat data. Coba lagi."
 }
