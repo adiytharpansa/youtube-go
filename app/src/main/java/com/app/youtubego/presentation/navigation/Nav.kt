@@ -32,7 +32,12 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.app.youtubego.presentation.common.EmptyState
 import com.app.youtubego.presentation.home.HomeScreen
+import com.app.youtubego.presentation.home.ShortsScreen
+import com.app.youtubego.presentation.library.CollectionScreen
+import com.app.youtubego.presentation.library.LibraryItem
 import com.app.youtubego.presentation.library.LibraryScreen
+import com.app.youtubego.presentation.library.SettingsScreen
+import com.app.youtubego.presentation.library.SubscriptionsScreen
 import com.app.youtubego.presentation.player.PlayerScreen
 import com.app.youtubego.presentation.search.SearchScreen
 import com.app.youtubego.presentation.theme.*
@@ -40,6 +45,7 @@ import com.app.youtubego.presentation.theme.*
 object Routes {
     const val HOME = "home"; const val SEARCH = "search"; const val PLAYER = "player/{videoId}"
     const val SHORTS = "shorts"; const val SUBS = "subs"; const val YOU = "you"
+    const val COLLECTION = "collection/{kind}"; const val SETTINGS = "settings"
 }
 
 private data class Tab(val route: String, val label: String, val off: ImageVector, val on: ImageVector)
@@ -99,18 +105,23 @@ fun YoutubeGoNavHost() {
             modifier = Modifier.padding(bottom = pad.calculateBottomPadding())
         ) {
             composable(Routes.HOME) { HomeScreen(onVideoClick = openPlayer, onSearchClick = { nav.navigate(Routes.SEARCH) }) }
-            composable(Routes.SHORTS) {
-                EmptyState(Icons.Outlined.SlowMotionVideo, "Shorts segera hadir", "Video pendek layar penuh sedang disiapkan.")
-            }
+            composable(Routes.SHORTS) { ShortsScreen(onVideoClick = openPlayer) }
             composable(Routes.SUBS) {
-                EmptyState(
-                    Icons.Outlined.Subscriptions, "Belum ada langganan",
-                    "Langganan channel favoritmu supaya video terbarunya muncul di sini.",
-                    actionLabel = "Jelajahi video",
-                    onAction = { nav.navigate(Routes.HOME) { launchSingleTop = true } },
+                SubscriptionsScreen(
+                    onExplore = { nav.navigate(Routes.HOME) { launchSingleTop = true } },
+                    onVideoClick = openPlayer
                 )
             }
-            composable(Routes.YOU) { LibraryScreen() }
+            composable(Routes.YOU) {
+                LibraryScreen(onItemClick = { item ->
+                    if (item == LibraryItem.SETTINGS) nav.navigate(Routes.SETTINGS)
+                    else nav.navigate("collection/${item.key}")
+                })
+            }
+            composable(Routes.COLLECTION, arguments = listOf(navArgument("kind") { type = NavType.StringType })) {
+                CollectionScreen(onBack = { nav.popBackStack() }, onVideoClick = openPlayer)
+            }
+            composable(Routes.SETTINGS) { SettingsScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.SEARCH) { SearchScreen(onBack = { nav.popBackStack() }, onVideoClick = openPlayer) }
             composable(Routes.PLAYER, arguments = listOf(navArgument("videoId") { type = NavType.StringType })) { entry ->
                 PlayerScreen(videoId = entry.arguments?.getString("videoId").orEmpty(), onBack = { nav.popBackStack() }, onVideoClick = openPlayer)

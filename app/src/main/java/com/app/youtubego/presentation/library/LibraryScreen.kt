@@ -14,6 +14,8 @@ import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,20 +25,29 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.app.youtubego.presentation.theme.*
 
-enum class LibraryItem(val label: String, val hint: String, val icon: ImageVector) {
-    HISTORY("Riwayat", "Video yang baru kamu tonton", Icons.Filled.History),
-    WATCH_LATER("Tonton nanti", "Belum ada video tersimpan", Icons.Filled.WatchLater),
-    LIKED("Video disukai", "Belum ada video disukai", Icons.Filled.ThumbUp),
-    DOWNLOADS("Unduhan", "Tonton tanpa internet", Icons.Filled.Download),
-    PLAYLISTS("Playlist", "Kumpulkan video favoritmu", Icons.AutoMirrored.Filled.PlaylistPlay),
-    SETTINGS("Pengaturan", "Kualitas, hemat data, tema", Icons.Filled.Settings),
+enum class LibraryItem(val key: String, val label: String, val hint: String, val icon: ImageVector) {
+    HISTORY("history", "Riwayat", "Video yang baru kamu tonton", Icons.Filled.History),
+    WATCH_LATER("saved", "Tonton nanti", "Video yang kamu simpan", Icons.Filled.WatchLater),
+    LIKED("liked", "Video disukai", "Video yang kamu sukai", Icons.Filled.ThumbUp),
+    DOWNLOADS("downloads", "Unduhan", "Tonton tanpa internet", Icons.Filled.Download),
+    PLAYLISTS("playlists", "Playlist", "Kumpulkan video favoritmu", Icons.AutoMirrored.Filled.PlaylistPlay),
+    SETTINGS("settings", "Pengaturan", "Preferensi aplikasi", Icons.Filled.Settings),
 }
 
-/** Halaman "Anda": akun lokal + pintu masuk ke semua koleksi pribadi. */
 @Composable
-fun LibraryScreen(onItemClick: (LibraryItem) -> Unit = {}) {
+fun LibraryScreen(
+    onItemClick: (LibraryItem) -> Unit = {},
+    vm: LibraryHomeViewModel = hiltViewModel(),
+) {
+    val history by vm.history.collectAsState()
+    val saved by vm.saved.collectAsState()
+    val liked by vm.liked.collectAsState()
+    val subscribed by vm.subscribed.collectAsState()
+    val autoplay by vm.autoplay.collectAsState()
+
     LazyColumn(
         Modifier.fillMaxSize().background(YgBackground).statusBarsPadding(),
         contentPadding = PaddingValues(bottom = 22.dp)
@@ -51,17 +62,15 @@ fun LibraryScreen(onItemClick: (LibraryItem) -> Unit = {}) {
                     Text("Semua yang kamu simpan, di satu tempat", color = YgMuted, style = MaterialTheme.typography.bodySmall)
                 }
                 Box(
-                    Modifier.size(42.dp).clip(CircleShape).background(YgSurfaceVariant).border(1.dp, YgOutline, CircleShape),
+                    Modifier.size(42.dp).clip(CircleShape).background(YgSurfaceVariant).border(1.dp, YgOutline, CircleShape).clickable { onItemClick(LibraryItem.SETTINGS) },
                     contentAlignment = Alignment.Center
                 ) { Icon(Icons.Default.Settings, contentDescription = "Pengaturan", tint = YgMuted, modifier = Modifier.size(20.dp)) }
             }
         }
         item {
-            // Profil lokal — gaya premium dengan aksen glow
             Row(
                 Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
+                    .fillMaxWidth().padding(horizontal = 16.dp)
                     .clip(RoundedCornerShape(22.dp))
                     .background(Brush.linearGradient(listOf(Color(0xFF24151A), YgSurfaceElevated, Color(0xFF18191E))))
                     .border(1.dp, YgOutlineStrong.copy(alpha = 0.7f), RoundedCornerShape(22.dp))
@@ -69,10 +78,7 @@ fun LibraryScreen(onItemClick: (LibraryItem) -> Unit = {}) {
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    Modifier.size(56.dp).clip(CircleShape).background(YgGradientAccent).padding(2.dp),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(Modifier.size(56.dp).clip(CircleShape).background(YgGradientAccent).padding(2.dp), contentAlignment = Alignment.Center) {
                     Box(Modifier.fillMaxSize().clip(CircleShape).background(YgSurface), contentAlignment = Alignment.Center) {
                         Text("A", color = YgOnSurface, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold))
                     }
@@ -96,7 +102,11 @@ fun LibraryScreen(onItemClick: (LibraryItem) -> Unit = {}) {
             Spacer(Modifier.height(20.dp))
         }
         item { YgSectionHeader("Perpustakaan", "Lanjutkan dari aktivitasmu") }
-        items(LibraryItem.entries.take(5), key = { it.name }) { LibraryTile(it, onItemClick) }
+        item { LibraryTile(LibraryItem.HISTORY, "${history.size} video", onItemClick) }
+        item { LibraryTile(LibraryItem.WATCH_LATER, "${saved.size} video", onItemClick) }
+        item { LibraryTile(LibraryItem.LIKED, "${liked.size} video", onItemClick) }
+        item { LibraryTile(LibraryItem.DOWNLOADS, "Belum tersedia", onItemClick) }
+        item { LibraryTile(LibraryItem.PLAYLISTS, "Belum tersedia", onItemClick) }
         item {
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f).height(1.dp).background(YgDivider))
@@ -104,42 +114,36 @@ fun LibraryScreen(onItemClick: (LibraryItem) -> Unit = {}) {
                 Box(Modifier.weight(1f).height(1.dp).background(YgDivider))
             }
         }
-        item { LibraryTile(LibraryItem.SETTINGS, onItemClick) }
+        item { LibraryTile(LibraryItem.SETTINGS, "Putar otomatis: ${if (autoplay) "aktif" else "nonaktif"}", onItemClick) }
         item {
-            Column(Modifier.fillMaxWidth().padding(top = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Icon(Icons.Default.PlayCircle, null, tint = YgAccent, modifier = Modifier.size(18.dp))
-                    Text("YouTube GO", color = YgMuted, style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
-                }
-                Spacer(Modifier.height(4.dp))
-                Text("Tontonan yang lebih ringan.", color = YgMutedSoft, style = MaterialTheme.typography.labelSmall)
-            }
+            Text(
+                "Mengikuti ${subscribed.size} channel",
+                color = YgMutedSoft,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
         }
     }
 }
 
 @Composable
-private fun LibraryTile(item: LibraryItem, onClick: (LibraryItem) -> Unit) {
+private fun LibraryTile(item: LibraryItem, hint: String, onClick: (LibraryItem) -> Unit) {
     Row(
         Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(YgSurfaceElevated)
+            .fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(16.dp)).background(YgSurfaceElevated)
             .border(1.dp, YgOutline.copy(alpha = 0.7f), RoundedCornerShape(16.dp))
             .clickable { onClick(item) }
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(YgSurfaceVariant),
-            contentAlignment = Alignment.Center
-        ) {
+        Box(Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(YgSurfaceVariant), contentAlignment = Alignment.Center) {
             Icon(item.icon, contentDescription = null, tint = YgAccent, modifier = Modifier.size(21.dp))
         }
         Column(Modifier.weight(1f).padding(horizontal = 13.dp)) {
             Text(item.label, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold))
-            Text(item.hint, color = YgMuted, style = MaterialTheme.typography.bodySmall)
+            Text(hint, color = YgMuted, style = MaterialTheme.typography.bodySmall)
         }
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = YgMutedSoft)
     }

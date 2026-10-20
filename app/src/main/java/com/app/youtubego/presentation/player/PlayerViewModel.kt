@@ -50,7 +50,13 @@ class PlayerViewModel @Inject constructor(
     private var commentsJob: Job? = null
     private var watchRecorded = false
     /** Catat sinyal minat sekali per video: judul -> topik, channel -> afinitas. */
-    private fun recordWatchOnce(v: VideoSummary) { if (!watchRecorded) { watchRecorded = true; interests.recordWatch(v) } }
+    private fun recordWatchOnce(v: VideoSummary) {
+        if (!watchRecorded) {
+            watchRecorded = true
+            interests.recordWatch(v)
+            library.recordWatch(v)
+        }
+    }
     init { load() }
     /** Muat ulang dari awal (URL putar kedaluwarsa, jadi retry WAJIB mengambil data segar dari kedua jalur, bukan memutar ulang URL lama). */
     fun retry() { load() }
