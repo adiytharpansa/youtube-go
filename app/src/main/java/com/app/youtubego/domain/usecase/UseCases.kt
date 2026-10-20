@@ -37,3 +37,10 @@ fun Throwable.toFriendlyMessage(): String = when (this) {
     }
     else -> "Gagal memuat data. Coba lagi."
 }
+
+class GetCommentsUseCase @Inject constructor(private val repo: VideoRepository) {
+    operator fun invoke(id: String): Flow<UiState<List<com.app.youtubego.domain.model.CommentItem>>> = flow {
+        emit(UiState.Loading)
+        emit(repo.comments(id).fold(onSuccess = { UiState.Success(it) }, onFailure = { UiState.Error(it.toFriendlyMessage()) }))
+    }
+}

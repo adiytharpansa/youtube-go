@@ -2,11 +2,14 @@ package com.app.youtubego.presentation.player
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.app.youtubego.data.local.UserLibraryStore
 import com.app.youtubego.data.newpipe.DevicePlayback
 import com.app.youtubego.data.newpipe.DeviceStreamSource
+import com.app.youtubego.domain.model.CommentItem
 import com.app.youtubego.domain.model.VideoDetail
 import com.app.youtubego.domain.model.VideoSummary
 import com.app.youtubego.domain.repository.InterestRepository
+import com.app.youtubego.domain.usecase.GetCommentsUseCase
 import com.app.youtubego.domain.usecase.GetVideoDetailUseCase
 import com.app.youtubego.presentation.common.UiState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,8 +25,10 @@ import javax.inject.Inject
 class PlayerViewModel @Inject constructor(
     savedState: SavedStateHandle,
     private val getDetail: GetVideoDetailUseCase,
+    private val getComments: GetCommentsUseCase,
     private val deviceSource: DeviceStreamSource,
     private val interests: InterestRepository,
+    private val library: UserLibraryStore,
 ) : ViewModel() {
     private val videoId: String = checkNotNull(savedState["videoId"])
     private val _state = MutableStateFlow<UiState<VideoDetail>>(UiState.Loading)
@@ -34,19 +39,32 @@ class PlayerViewModel @Inject constructor(
     /** true sesudah percobaan ekstraksi di perangkat selesai, apa pun hasilnya. */
     private val _deviceSettled = MutableStateFlow(false)
     val deviceSettled: StateFlow<Boolean> = _deviceSettled.asStateFlow()
+    private val _comments = MutableStateFlow<UiState<List<CommentItem>>>(UiState.Loading)
+    val comments: StateFlow<UiState<List<CommentItem>>> = _comments.asStateFlow()
+    val liked: StateFlow<Set<String>> = library.liked
+    val saved: StateFlow<Set<String>> = library.saved
+    val subscribed: StateFlow<Set<String>> = library.subscribed
+    val autoplay: StateFlow<Boolean> = library.autoplay
     private var job: Job? = null
+    private var deviceJob: Job? = null
+    private var commentsJob: Job? = null
     private var watchRecorded = false
     /** Catat sinyal minat sekali per video: judul -> topik, channel -> afinitas. */
     private fun recordWatchOnce(v: VideoSummary) { if (!watchRecorded) { watchRecorded = true; interests.recordWatch(v) } }
-    private var deviceJob: Job? = null
     init { load() }
     /** Muat ulang dari awal (URL putar kedaluwarsa, jadi retry WAJIB mengambil data segar dari kedua jalur, bukan memutar ulang URL lama). */
     fun retry() { load() }
+    fun toggleLike() = library.toggleLiked(videoId)
+    fun toggleSave() = library.toggleSaved(videoId)
+    fun toggleSubscribe(channelId: String) = library.toggleSubscribed(channelId)
+    fun setAutoplay(on: Boolean) = library.setAutoplay(on)
     private fun load() {
         job?.cancel()
         deviceJob?.cancel()
+        commentsJob?.cancel()
         _device.value = null
         _deviceSettled.value = false
+        commentsJob = getComments(videoId).onEach { _comments.value = it }.launchIn(viewModelScope)
         job = getDetail(videoId).onEach { result ->
             if (result is UiState.Success) recordWatchOnce(result.data.summary)
             val dev = _device.value
