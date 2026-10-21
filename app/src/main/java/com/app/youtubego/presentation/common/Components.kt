@@ -35,9 +35,11 @@ fun Modifier.shimmer(): Modifier {
     val transition = rememberInfiniteTransition(label = "shimmer")
     val x = transition.animateFloat(-400f, 1200f, infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Restart), label = "x")
     // x dibaca di fase gambar (bukan saat komposisi): kerangka pemuatan bergerak tanpa menyusun ulang elemen tiap frame.
+    val cVariant = YgSurfaceVariant
+    val cHigh = YgSurfaceHigh
     return this.drawBehind {
         val xv = x.value
-        drawRect(Brush.linearGradient(listOf(YgSurfaceVariant, YgSurfaceHigh, YgSurfaceVariant), start = Offset(xv, 0f), end = Offset(xv + 400f, 0f)))
+        drawRect(Brush.linearGradient(listOf(cVariant, cHigh, cVariant), start = Offset(xv, 0f), end = Offset(xv + 400f, 0f)))
     }
 }
 @Composable
