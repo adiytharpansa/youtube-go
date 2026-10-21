@@ -73,8 +73,8 @@ fun VideoCardPro(
     watchedFraction: Float = 0f,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    val meta = listOfNotNull(
-        video.author.takeIf { it.isNotBlank() },
+    // Dua baris seperti aplikasi YouTube modern: nama channel, lalu statistik (tidak terpotong "...").
+    val stats = listOfNotNull(
         if (video.isLive) "Sedang live" else "${formatViewsId(video.viewCount)} tontonan",
         formatRelativeTime(video.published).takeIf { it.isNotEmpty() && !video.isLive },
     ).joinToString(" • ")
@@ -107,8 +107,9 @@ fun VideoCardPro(
                     .clickable(enabled = video.authorId.isNotBlank()) { onChannelClick(video.authorId) },
             )
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                Text(video.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(meta, color = YgMuted, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(video.title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (video.author.isNotBlank()) Text(video.author, color = YgMuted, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(stats, color = YgMuted, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (actions.isNotEmpty()) {
                 IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, contentDescription = "Opsi lainnya", tint = YgMuted) }

@@ -3,6 +3,7 @@ package com.app.youtubego.presentation.navigation
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -38,6 +39,7 @@ import com.app.youtubego.presentation.shorts.ShortsScreen
 import com.app.youtubego.presentation.subs.SubscriptionsScreen
 import com.app.youtubego.presentation.theme.YgAccent
 import com.app.youtubego.presentation.theme.YgMuted
+import com.app.youtubego.presentation.theme.YgOutline
 import com.app.youtubego.presentation.theme.YgSurface
 
 object Routes {
@@ -53,9 +55,9 @@ private data class Tab(val route: String, val label: String, val off: ImageVecto
 
 private val tabs = listOf(
     Tab(Routes.HOME, "Beranda", Icons.Outlined.Home, Icons.Filled.Home),
-    Tab(Routes.SHORTS, "Shorts", Icons.Outlined.SlowMotionVideo, Icons.Filled.SlowMotionVideo),
+    Tab(Routes.SHORTS, "Shorts", Icons.Outlined.SmartDisplay, Icons.Filled.SmartDisplay),
     Tab(Routes.SUBS, "Langganan", Icons.Outlined.Subscriptions, Icons.Filled.Subscriptions),
-    Tab(Routes.YOU, "Anda", Icons.Outlined.AccountCircle, Icons.Filled.AccountCircle),
+    Tab(Routes.YOU, "Anda", Icons.Outlined.VideoLibrary, Icons.Filled.VideoLibrary),
 )
 
 @Composable
@@ -79,7 +81,8 @@ fun YoutubeGoNavHost() {
         bottomBar = {
             Column {
             if (!onPlayerRoute && !pauseMain) MiniPlayerBar(onOpen = openPlayer)
-            if (showBar) NavigationBar(containerColor = YgSurface) {
+            if (showBar) HorizontalDivider(color = YgOutline, thickness = 0.5.dp)
+            if (showBar) NavigationBar(containerColor = YgSurface, tonalElevation = 0.dp) {
                 tabs.forEach { tab ->
                     val selected = dest?.hierarchy?.any { it.route == tab.route } == true
                     NavigationBarItem(
@@ -94,7 +97,7 @@ fun YoutubeGoNavHost() {
                         label = { Text(tab.label) },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = YgAccent, selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                            indicatorColor = YgAccent.copy(alpha = 0.18f),
+                            indicatorColor = YgAccent.copy(alpha = 0.14f),
                             unselectedIconColor = YgMuted, unselectedTextColor = YgMuted,
                         ),
                     )
