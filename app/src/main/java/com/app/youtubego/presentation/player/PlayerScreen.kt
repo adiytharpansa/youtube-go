@@ -442,6 +442,11 @@ fun PlayerScreen(
                     onMinimizeDragEnd = { dragScope.launch { if (dragAnim.value > minimizeThresholdPx) minimize() else dragAnim.animateTo(0f) } },
                 )
             }
+            // Efek loading awal: sebelum sumber video siap (pemutar masih IDLE) area video tidak lagi hitam kosong.
+            // Saat buffering, spinner ditampilkan oleh overlay; saat galat, pesan galat yang tampil.
+            if (!inPip && playerError == null && !ended && snap.state == Player.STATE_IDLE) {
+                CircularProgressIndicator(Modifier.align(Alignment.Center).size(40.dp), color = Color.White, strokeWidth = 3.dp)
+            }
             playerError?.let { msg ->
                 Column(
                     Modifier.fillMaxSize().background(Color.Black.copy(0.75f)).padding(16.dp),

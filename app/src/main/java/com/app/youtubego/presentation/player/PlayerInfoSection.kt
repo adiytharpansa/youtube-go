@@ -171,7 +171,14 @@ internal fun CommentsTeaser(comments: UiState<List<CommentItem>>, onOpen: () -> 
     ) {
         Text(stringResource(R.string.comments_title), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
         when (comments) {
-            is UiState.Loading -> MutedLine(stringResource(R.string.comments_loading))
+            is UiState.Loading -> Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(24.dp).clip(CircleShape).shimmer())
+                Column(Modifier.padding(start = 8.dp)) {
+                    Box(Modifier.fillMaxWidth(0.85f).height(12.dp).clip(MaterialTheme.shapes.extraSmall).shimmer())
+                    Spacer(Modifier.height(6.dp))
+                    Box(Modifier.fillMaxWidth(0.5f).height(12.dp).clip(MaterialTheme.shapes.extraSmall).shimmer())
+                }
+            }
             is UiState.Error -> MutedLine(stringResource(R.string.comments_unavailable))
             is UiState.Success -> {
                 val top = comments.data.firstOrNull()
