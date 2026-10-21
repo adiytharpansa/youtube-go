@@ -48,4 +48,3 @@ Seluruh versi dikunci di `app/build.gradle.kts` (tanpa version catalog terpisah 
 - Batasan jujur jalur ini (sudah diketahui dari web app): kualitas gabungan saat ini 360p; tiap permintaan Range memecahkan PoW ulang (±2–5 detik ke byte pertama) dan fungsi Vercel berumur maks 60 detik. Jalur naik kelasnya adalah DASH adaptif dari `dashUrl` (tahap 2), bukan mengganti API.
 
 ## 3. Struktur Proyek (Clean Architecture)
-
