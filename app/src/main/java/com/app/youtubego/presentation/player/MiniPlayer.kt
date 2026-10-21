@@ -103,10 +103,12 @@ fun MiniPlayerBar(onOpen: (String) -> Unit, vm: MiniPlayerViewModel = hiltViewMo
         player.addListener(l)
         onDispose { player.removeListener(l) }
     }
-    LaunchedEffect(mediaId) {
+    // Polling posisi hanya saat memutar (jeda/kosong = satu kali baca): tanpa pekerjaan sia-sia di latar.
+    LaunchedEffect(mediaId, playing) {
         while (true) {
             val d = player.duration
             frac = if (d > 0 && d != C.TIME_UNSET) (player.currentPosition.toFloat() / d).coerceIn(0f, 1f) else 0f
+            if (!playing) break
             delay(500)
         }
     }

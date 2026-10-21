@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.drawBehind
 import coil.compose.AsyncImage
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CloudOff
@@ -32,9 +33,12 @@ import com.app.youtubego.presentation.theme.YgSurfaceVariant
 @Composable
 fun Modifier.shimmer(): Modifier {
     val transition = rememberInfiniteTransition(label = "shimmer")
-    val x by transition.animateFloat(-400f, 1200f, infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Restart), label = "x")
-    val brush = Brush.linearGradient(listOf(YgSurfaceVariant, YgSurfaceHigh, YgSurfaceVariant), start = Offset(x, 0f), end = Offset(x + 400f, 0f))
-    return this.background(brush)
+    val x = transition.animateFloat(-400f, 1200f, infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Restart), label = "x")
+    // x dibaca di fase gambar (bukan saat komposisi): kerangka pemuatan bergerak tanpa menyusun ulang elemen tiap frame.
+    return this.drawBehind {
+        val xv = x.value
+        drawRect(Brush.linearGradient(listOf(YgSurfaceVariant, YgSurfaceHigh, YgSurfaceVariant), start = Offset(xv, 0f), end = Offset(xv + 400f, 0f)))
+    }
 }
 @Composable
 fun VideoCardShimmer() {

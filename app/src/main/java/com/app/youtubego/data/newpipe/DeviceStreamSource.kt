@@ -125,6 +125,7 @@ class DeviceStreamSource @Inject constructor(
     fun warmUp() {
         scope.launch {
             runCatching { ensureInit() }
+            kotlinx.coroutines.delay(700)   // beri CPU ke frame pertama dulu; handshake TLS menyusul
             runCatching { downloader.warmUp() }
         }
     }

@@ -290,7 +290,7 @@ class PlayerHolder @Inject constructor(
 
     private val mediaCache: SimpleCache? by lazy {
         runCatching {
-            SimpleCache(File(context.cacheDir, "media"), LeastRecentlyUsedCacheEvictor(256L * 1024 * 1024), StandaloneDatabaseProvider(context))
+            SimpleCache(File(context.cacheDir, "media"), LeastRecentlyUsedCacheEvictor(128L * 1024 * 1024), StandaloneDatabaseProvider(context))
         }.getOrNull()
     }
 

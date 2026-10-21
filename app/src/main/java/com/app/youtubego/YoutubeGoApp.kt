@@ -18,6 +18,9 @@ class YoutubeGoApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         // Panaskan NewPipe + koneksi TLS ke YouTube di latar belakang: video pertama yang diketuk tidak menunggu handshake/inisialisasi.
+        // Memuat berkas preferensi dimulai di thread latar SEKARANG; saat Hilt membuat store (di MainActivity) data sudah siap,
+        // tidak lagi memblokir thread utama saat startup.
+        listOf("user_library", "interest_profile", "search_history", "downloads").forEach { getSharedPreferences(it, MODE_PRIVATE) }
         deviceSource.warmUp()
     }
 
@@ -35,8 +38,8 @@ class YoutubeGoApp : Application(), ImageLoaderFactory {
             .build()
         return ImageLoader.Builder(this)
             .okHttpClient(client)
-            .memoryCache { MemoryCache.Builder(this).maxSizePercent(0.25).build() }
-            .diskCache { DiskCache.Builder().directory(cacheDir.resolve("thumbs")).maxSizeBytes(256L * 1024 * 1024).build() }
+            .memoryCache { MemoryCache.Builder(this).maxSizePercent(0.15).build() }
+            .diskCache { DiskCache.Builder().directory(cacheDir.resolve("thumbs")).maxSizeBytes(128L * 1024 * 1024).build() }
             .respectCacheHeaders(false)
             .allowRgb565(true)
             .crossfade(120)

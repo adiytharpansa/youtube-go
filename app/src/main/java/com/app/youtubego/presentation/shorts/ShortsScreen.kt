@@ -11,6 +11,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -851,10 +852,13 @@ private fun BufferingSweep(modifier: Modifier = Modifier) {
 @Composable
 private fun Modifier.darkShimmer(strong: Boolean = false): Modifier {
     val transition = rememberInfiniteTransition(label = "sk")
-    val x by transition.animateFloat(-500f, 1500f, infiniteRepeatable(tween(1200, easing = LinearEasing)), label = "x")
+    val x = transition.animateFloat(-500f, 1500f, infiniteRepeatable(tween(1200, easing = LinearEasing)), label = "x")
     val base = if (strong) Color(0xFF23262C) else Color(0xFF121418)
     val high = if (strong) Color(0xFF353A43) else Color(0xFF1F2329)
-    return background(Brush.linearGradient(listOf(base, high, base), start = Offset(x, 0f), end = Offset(x + 500f, 300f)))
+    return drawBehind {
+        val xv = x.value
+        drawRect(Brush.linearGradient(listOf(base, high, base), start = Offset(xv, 0f), end = Offset(xv + 500f, 300f)))
+    }
 }
 
 /** Kerangka pemuatan awal: bentuk caption + rail yang sama dengan halaman asli, jadi tidak ada lompatan tata letak. */

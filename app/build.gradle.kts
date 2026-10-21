@@ -13,8 +13,8 @@ android {
         applicationId = "com.app.youtubego"
         minSdk = 24
         targetSdk = 34
-        versionCode = 58
-        versionName = "1.54.3"
+        versionCode = 59
+        versionName = "1.54.4"
     }
     buildTypes {
         release { isMinifyEnabled = true; isShrinkResources = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") }
@@ -23,7 +23,7 @@ android {
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17; isCoreLibraryDesugaringEnabled = true }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
-    packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
+    packaging { resources { excludes += setOf("/META-INF/{AL2.0,LGPL2.1}", "DebugProbesKt.bin", "kotlin-tooling-metadata.json") } }
 }
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.10.01")

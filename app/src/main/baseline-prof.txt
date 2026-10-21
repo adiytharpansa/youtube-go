@@ -15,3 +15,13 @@ Landroidx/compose/ui/**;
 Landroidx/compose/foundation/**;
 Landroidx/compose/material3/**;
 Lcom/app/youtubego/**;
+HSPLandroidx/media3/**;->**(**)**
+HSPLkotlinx/coroutines/**;->**(**)**
+HSPLokhttp3/**;->**(**)**
+HSPLokio/**;->**(**)**
+HSPLdagger/hilt/**;->**(**)**
+HSPLandroidx/hilt/**;->**(**)**
+Landroidx/media3/**;
+Lkotlinx/coroutines/**;
+Lokhttp3/**;
+Ldagger/hilt/**;
