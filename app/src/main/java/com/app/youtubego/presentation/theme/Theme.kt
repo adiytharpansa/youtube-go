@@ -1,4 +1,5 @@
 package com.app.youtubego.presentation.theme
+import androidx.compose.material.ripple.RippleAlpha
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -20,6 +21,7 @@ private val DarkColors = darkColorScheme(
 )
 private val LightColors = lightColorScheme(primary = YgAccent, secondary = YgAccent2)
 // Efek ripple putih transparan saat ditekan dimatikan di seluruh aplikasi.
+@OptIn(ExperimentalMaterial3Api::class)
 private val NoRipple = RippleConfiguration(rippleAlpha = RippleAlpha(0f, 0f, 0f, 0f))
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
