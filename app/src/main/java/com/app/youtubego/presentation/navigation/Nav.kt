@@ -87,7 +87,14 @@ fun YoutubeGoNavHost() {
     val dest = nav.currentBackStackEntryAsState().value?.destination
     // Bar bawah hanya tampil di 4 halaman utama; Pemutar & Cari layar penuh.
     val showBar = tabs.any { t -> dest?.hierarchy?.any { it.route == t.route } == true }
-    val openPlayer: (String) -> Unit = { nav.navigate("player/$it") }
+    val openPlayer: (String) -> Unit = { id ->
+        val cur = nav.currentDestination
+        nav.navigate("player/$id") {
+            // Dari pemutar ke video lain: ganti entri lama (tidak menumpuk), supaya Kembali tidak memutar ulang video lama.
+            if (cur?.route?.startsWith("player/") == true) popUpTo(cur.id) { inclusive = true }
+            launchSingleTop = true
+        }
+    }
     val openChannel: (String) -> Unit = { if (it.isNotBlank()) nav.navigate("channel/$it") }
     val back: () -> Unit = { nav.popBackStack() }
     val route = dest?.route.orEmpty()

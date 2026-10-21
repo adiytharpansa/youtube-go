@@ -186,8 +186,9 @@ class PlayerHolder @Inject constructor(
         // "buffer-putar-buffer" berulang. Buffer ke depan 30-90 dtk untuk jaringan seluler yang naik-turun, dan
         // 30 dtk buffer belakang supaya mundur/ulang beberapa detik langsung jalan tanpa mengunduh lagi.
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(30_000, 90_000, 500, 2_500)
-            .setBackBuffer(30_000, true)
+            .setBufferDurationsMs(30_000, 60_000, 500, 2_500)
+            .setTargetBufferBytes(64 * 1024 * 1024)   // batas keras 64 MB: cegah OutOfMemory di HP RAM kecil
+            .setBackBuffer(15_000, true)
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
         // Dekoder cadangan: bila dekoder utama gagal inisialisasi (sering di HP murah), coba dekoder lain, bukan galat.

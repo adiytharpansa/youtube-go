@@ -330,6 +330,10 @@ class ShortsViewModel @Inject constructor(
                     pool.remove(id)?.release()
                     pool[id] = p
                     trimPool()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // preload hanya optimasi: gagal = abaikan, pemutar dibuat ulang saat Short dibuka
                 } finally { preloading.remove(id) }
             }
         }
