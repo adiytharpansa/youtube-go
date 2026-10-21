@@ -115,7 +115,7 @@ fun YoutubeGoNavHost() {
                 )
             }
             composable(Routes.YOU) {
-                LibraryScreen(onItemClick = { item ->
+                LibraryScreen(onVideoClick = openPlayer, onItemClick = { item ->
                     nav.navigate(when (item) {
                         LibraryItem.HISTORY -> Routes.HISTORY
                         LibraryItem.WATCH_LATER -> Routes.WATCH_LATER
