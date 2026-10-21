@@ -41,6 +41,9 @@ class LibraryViewModel @Inject constructor(
             lists.firstOrNull { it.id == id }?.videoIds.orEmpty().mapNotNull { meta[it] }
         }
 
+    val progress: StateFlow<Map<String, Long>> = library.progressMap
+    fun startPlaylist(name: String, videos: List<VideoSummary>) = holder.startPlaylist(name, videos)
+
     /** true = ditambahkan; false = sudah di antrean / sedang diputar. */
     fun enqueue(video: VideoSummary): Boolean { library.remember(video); return holder.enqueue(video) }
     fun toggleSaved(video: VideoSummary) = library.toggleSaved(video)

@@ -50,6 +50,17 @@ class UserLibraryStore @Inject constructor(@ApplicationContext context: Context)
 
     /** Posisi tonton terakhir per video (id -> ms), terbaru di belakang; dipakai untuk melanjutkan seperti YouTube. */
     private val progress: LinkedHashMap<String, Long> = readProgress()
+    private val _progressMap = MutableStateFlow<Map<String, Long>>(LinkedHashMap(progress))
+    /** Salinan posisi tonton (id -> ms) untuk bilah merah "lanjut menonton" di kartu video. */
+    val progressMap: StateFlow<Map<String, Long>> = _progressMap.asStateFlow()
+
+    private val _captionSize = MutableStateFlow(prefs.getInt("caption_size", 1))
+    private val _captionStyle = MutableStateFlow(prefs.getInt("caption_style", 0))
+    /** Indeks ukuran teks takarir (0 kecil .. 3 sangat besar) dan gaya (0 latar transparan, 1 tanpa latar, 2 kuning, 3 latar hitam). */
+    val captionSize: StateFlow<Int> = _captionSize.asStateFlow()
+    val captionStyle: StateFlow<Int> = _captionStyle.asStateFlow()
+    fun setCaptionSize(i: Int) { _captionSize.value = i; prefs.edit().putInt("caption_size", i).apply() }
+    fun setCaptionStyle(i: Int) { _captionStyle.value = i; prefs.edit().putInt("caption_style", i).apply() }
 
     val liked: StateFlow<Set<String>> = _liked.asStateFlow()
     val saved: StateFlow<Set<String>> = _saved.asStateFlow()
@@ -142,6 +153,7 @@ class UserLibraryStore @Inject constructor(@ApplicationContext context: Context)
         if (ms <= 0L) { if (progress.remove(videoId) == null) return }
         else { progress.remove(videoId); progress[videoId] = ms }
         while (progress.size > MAX_PROGRESS) progress.remove(progress.keys.first())
+        _progressMap.value = LinkedHashMap(progress)
         prefs.edit().putString("progress", progress.entries.joinToString(",") { "${it.key}:${it.value}" }).apply()
     }
 

@@ -56,6 +56,10 @@ class PlayerViewModel @Inject constructor(
     val highQuality: StateFlow<Boolean> = library.highQuality
     val backgroundPlay: StateFlow<Boolean> = library.backgroundPlay
     val playlists: StateFlow<List<Playlist>> = library.playlists
+    val captionSize: StateFlow<Int> = library.captionSize
+    val captionStyle: StateFlow<Int> = library.captionStyle
+    fun setCaptionSize(i: Int) = library.setCaptionSize(i)
+    fun setCaptionStyle(i: Int) = library.setCaptionStyle(i)
     val downloadItems = downloads.items
     private var job: Job? = null
     private var deviceJob: Job? = null

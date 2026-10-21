@@ -49,6 +49,13 @@ fun VideoItem(
     val isDownloaded by remember(video.id) {
         derivedStateOf { downloadsState.value.any { it.video.id == video.id && it.status == com.app.youtubego.data.local.DownloadStatus.DONE } }
     }
+    val progressState = vm.progress.collectAsState()
+    val watched by remember(video.id, video.lengthSeconds) {
+        derivedStateOf {
+            val ms = progressState.value[video.id] ?: 0L
+            if (ms > 0L && video.lengthSeconds > 0L && !video.isLive) (ms / 1000f / video.lengthSeconds).coerceIn(0f, 1f) else 0f
+        }
+    }
     var pickerOpen by remember { mutableStateOf(false) }
     fun toast(msg: String) = Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
 
@@ -70,7 +77,7 @@ fun VideoItem(
         })
         addAll(extraActions)
     }
-    VideoCardPro(video, onClick, modifier, onChannelClick = onChannelClick, actions = actions)
+    VideoCardPro(video, onClick, modifier, onChannelClick = onChannelClick, actions = actions, watchedFraction = watched)
 
     if (pickerOpen) {
         val playlists by vm.playlists.collectAsState()

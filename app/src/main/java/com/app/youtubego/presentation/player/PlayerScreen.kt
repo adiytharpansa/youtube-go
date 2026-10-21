@@ -13,6 +13,7 @@ import android.util.Rational
 import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -30,6 +31,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -57,7 +61,9 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
+import androidx.media3.ui.SubtitleView
 import coil.compose.AsyncImage
 import com.app.youtubego.domain.model.CaptionTrack
 import com.app.youtubego.domain.model.CommentItem
@@ -70,14 +76,30 @@ import com.app.youtubego.presentation.library.PlaylistPickerDialog
 import com.app.youtubego.presentation.library.VideoItem
 import com.app.youtubego.data.local.DownloadStatus
 import com.app.youtubego.presentation.theme.YgMuted
+import com.app.youtubego.presentation.theme.YgSurface
 import com.app.youtubego.presentation.theme.YgSurfaceVariant
 import com.app.youtubego.playback.BackgroundPlaybackEffect
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 private enum class PlayerSheet { SETTINGS, COMMENTS, DESCRIPTION, CHAPTERS }
 private val SPEEDS = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
+private val CAPTION_SIZE_NAMES = listOf("Kecil", "Normal", "Besar", "Sangat besar")
+private val CAPTION_SCALES = floatArrayOf(0.75f, 1f, 1.3f, 1.7f)
+private val CAPTION_STYLE_NAMES = listOf("Latar transparan", "Tanpa latar", "Teks kuning", "Latar hitam penuh")
+
+@androidx.annotation.OptIn(UnstableApi::class)
+private fun captionStyleOf(i: Int): CaptionStyleCompat {
+    val white = 0xFFFFFFFF.toInt(); val black = 0xFF000000.toInt(); val clear = 0
+    return when (i) {
+        1 -> CaptionStyleCompat(white, clear, clear, CaptionStyleCompat.EDGE_TYPE_OUTLINE, black, null)
+        2 -> CaptionStyleCompat(0xFFFFEB3B.toInt(), 0x99000000.toInt(), clear, CaptionStyleCompat.EDGE_TYPE_NONE, black, null)
+        3 -> CaptionStyleCompat(white, black, clear, CaptionStyleCompat.EDGE_TYPE_NONE, black, null)
+        else -> CaptionStyleCompat(white, 0x99000000.toInt(), clear, CaptionStyleCompat.EDGE_TYPE_NONE, black, null)
+    }
+}
 
 /**
  * Halaman tonton ala YouTube.
@@ -103,6 +125,8 @@ fun PlayerScreen(
     val highQuality by vm.highQuality.collectAsState()
     val backgroundPlay by vm.backgroundPlay.collectAsState()
     val playlists by vm.playlists.collectAsState()
+    val captionSize by vm.captionSize.collectAsState()
+    val captionStyle by vm.captionStyle.collectAsState()
     val downloadItems by vm.downloadItems.collectAsState()
     var playlistDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -126,6 +150,16 @@ fun PlayerScreen(
     val queue by holder.queue.collectAsState()
     // Video ini sedang diputar: keluarkan dari antrean (seperti YouTube).
     LaunchedEffect(videoId) { holder.removeFromQueue(videoId) }
+    val run by holder.playlistRun.collectAsState()
+    val runNow = run
+    val runIndex = runNow?.videos?.indexOfFirst { it.id == videoId } ?: -1
+    // Pindah ke video di luar playlist (mis. dari rekomendasi): keluar dari mode playlist.
+    LaunchedEffect(videoId, runNow) { if (runNow != null && runIndex < 0) holder.clearPlaylist() }
+    var shareAt by remember { mutableStateOf<Pair<String, Long>?>(null) }
+    // Geser turun di pemutar (portrait): layar ikut turun & mengecil mengikuti jari; lepas lewat ambang = kecilkan.
+    val dragAnim = remember { Animatable(0f) }
+    val dragScope = rememberCoroutineScope()
+    val minimizeThresholdPx = with(LocalDensity.current) { 96.dp.toPx() }
     // ON_STOP (layar mati / ke Beranda): suara lanjut bila "Putar di latar belakang" aktif, selain itu jeda.
     BackgroundPlaybackEffect(holder, backgroundPlay)
     DisposableEffect(videoId) {
@@ -219,9 +253,12 @@ fun PlayerScreen(
 
     val detail = (state as? UiState.Success)?.data
     val captions = remember(detail) { detail?.captions.orEmpty().filter { it.url.isNotBlank() } }
-    val nextVideo = queue.firstOrNull { it.id != videoId } ?: detail?.recommendations?.firstOrNull { it.id != videoId }
+    val prevVideo = if (runNow != null && runIndex > 0) runNow.videos[runIndex - 1] else null
+    val nextVideo = queue.firstOrNull { it.id != videoId }
+        ?: (if (runNow != null && runIndex >= 0) runNow.videos.getOrNull(runIndex + 1) else detail?.recommendations?.firstOrNull { it.id != videoId })
     val ended = snap.state == Player.STATE_ENDED
     LaunchedEffect(nextVideo?.id) { holder.upNextId = nextVideo?.id }
+    LaunchedEffect(prevVideo?.id) { holder.upPrevId = prevVideo?.id }
     var autoCancelled by remember(videoId) { mutableStateOf(false) }
     var countdown by remember(videoId) { mutableIntStateOf(5) }
     LaunchedEffect(ended, autoplay, nextVideo?.id, autoCancelled) {
@@ -347,7 +384,15 @@ fun PlayerScreen(
     val canPip = remember(activity) { activity?.packageManager?.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE) == true }
 
     Column(
-        Modifier.fillMaxSize().background(Color.Black)
+        Modifier.fillMaxSize()
+            .graphicsLayer {
+                val dy = dragAnim.value
+                translationY = dy
+                val f = (1f - dy / 1400f).coerceIn(0.88f, 1f)
+                scaleX = f; scaleY = f; transformOrigin = TransformOrigin(0.5f, 0f)
+                alpha = (1f - dy / 1000f).coerceIn(0.5f, 1f)
+            }
+            .background(Color.Black)
             .then(if (!isFullscreen && !inPip) Modifier.statusBarsPadding() else Modifier),
     ) {
         Box(Modifier.fillMaxWidth().then(if (isFullscreen || inPip) Modifier.fillMaxHeight() else Modifier.aspectRatio(16f / 9f))) {
@@ -363,6 +408,10 @@ fun PlayerScreen(
                     it.resizeMode = if (zoomFill) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
                     // Layar boleh mati saat dijeda (hemat baterai), tetap menyala saat memutar / buffering.
                     it.keepScreenOn = snap.isPlaying || snap.state == Player.STATE_BUFFERING
+                    it.subtitleView?.let { sv ->
+                        sv.setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * CAPTION_SCALES[captionSize.coerceIn(0, 3)])
+                        sv.setStyle(captionStyleOf(captionStyle))
+                    }
                 },
                 onRelease = { it.player = null },
                 modifier = Modifier.fillMaxSize(),
@@ -377,9 +426,12 @@ fun PlayerScreen(
                     onBack = { if (isFullscreen) isFullscreen = false else minimize() },
                     onEnterPip = { enterPip(activity) },
                     onNext = nextVideo?.let { n -> { onVideoClick(n.id) } },
+                    onPrevious = prevVideo?.let { p -> { onVideoClick(p.id) } },
                     storyboard = device?.storyboard, chapters = device?.chapters.orEmpty(),
                     onOpenChapters = { sheet = PlayerSheet.CHAPTERS },
                     onPinchZoom = { zoomFill = it },
+                    onMinimizeDrag = { dy -> dragScope.launch { dragAnim.snapTo((dragAnim.value + dy).coerceAtLeast(0f)) } },
+                    onMinimizeDragEnd = { dragScope.launch { if (dragAnim.value > minimizeThresholdPx) minimize() else dragAnim.animateTo(0f) } },
                 )
             }
             playerError?.let { msg ->
@@ -426,10 +478,10 @@ fun PlayerScreen(
                                     liked = liked, saved = saved,
                                     onLike = vm::toggleLike, onSave = vm::toggleSave,
                                     onShare = {
-                                        val send = Intent(Intent.ACTION_SEND).apply {
-                                            type = "text/plain"; putExtra(Intent.EXTRA_TEXT, "${d.summary.title}\nhttps://youtu.be/$videoId")
-                                        }
-                                        context.startActivity(Intent.createChooser(send, "Bagikan video"))
+                                        val sec = player.currentPosition / 1000
+                                        // Sudah ditonton >= 5 dtk: tawarkan "Mulai dari 1:23" seperti YouTube.
+                                        if (sec >= 5 && player.currentMediaItem?.mediaId == videoId) shareAt = d.summary.title to sec
+                                        else shareVideo(context, d.summary.title, videoId, null)
                                     },
                                 )
                             }
@@ -439,7 +491,16 @@ fun PlayerScreen(
                                     Text("Antrean (${queue.size})", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall,
                                         modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 4.dp))
                                 }
-                                items(queue, key = { "q_" + it.id }) { v -> QueueRow(v, onPlay = { onVideoClick(v.id) }, onRemove = { holder.removeFromQueue(v.id) }) }
+                                items(queue, key = { "q_" + it.id }) { v -> QueueRow(v, current = false, onPlay = { onVideoClick(v.id) }, onRemove = { holder.removeFromQueue(v.id) }) }
+                            }
+                            if (runNow != null && runIndex >= 0) {
+                                item {
+                                    Text("${runNow.name} • ${runIndex + 1}/${runNow.videos.size}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall,
+                                        modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 4.dp))
+                                }
+                                items(runNow.videos, key = { "p_" + it.id }) { v ->
+                                    QueueRow(v, current = v.id == videoId, onPlay = { if (v.id != videoId) onVideoClick(v.id) }, onRemove = null)
+                                }
                             }
                             item {
                                 Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -452,7 +513,7 @@ fun PlayerScreen(
                             items(d.recommendations, key = { it.id }) { v -> VideoItem(v, onVideoClick, onChannelClick, libVm) }
                         }
                         when (sheet) {
-                            PlayerSheet.COMMENTS -> CommentsSheet(comments) { sheet = null }
+                            PlayerSheet.COMMENTS -> CommentsSheet(comments, onSeek = { player.seekTo(it) }) { sheet = null }
                             PlayerSheet.DESCRIPTION -> DescriptionSheet(d, onSeek = { player.seekTo(it) }) { sheet = null }
                             else -> Unit
                         }
@@ -460,6 +521,22 @@ fun PlayerScreen(
                 }
             }
         }
+    }
+    shareAt?.let { (title, sec) ->
+        var withTime by remember(sec) { mutableStateOf(true) }
+        AlertDialog(
+            onDismissRequest = { shareAt = null },
+            containerColor = YgSurface,
+            title = { Text("Bagikan video") },
+            text = {
+                Row(Modifier.fillMaxWidth().clickable { withTime = !withTime }, verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = withTime, onCheckedChange = { withTime = it })
+                    Text("Mulai dari ${formatDuration(sec)}")
+                }
+            },
+            confirmButton = { TextButton(onClick = { shareAt = null; shareVideo(context, title, videoId, if (withTime) sec else null) }) { Text("Bagikan") } },
+            dismissButton = { TextButton(onClick = { shareAt = null }) { Text("Batal") } },
+        )
     }
     if (playlistDialog) {
         PlaylistPickerDialog(
@@ -476,6 +553,8 @@ fun PlayerScreen(
             loopOn = loopOn, onLoopChange = { loopOn = it; player.repeatMode = if (it) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF },
             zoomFill = zoomFill, onZoomChange = { zoomFill = it },
             sleepLabel = sleepLabel, sleepChoices = sleepChoices,
+            captionSizeLabel = CAPTION_SIZE_NAMES[captionSize.coerceIn(0, 3)], captionSizeChoices = CAPTION_SIZE_NAMES.mapIndexed { i, n -> Choice(n, captionSize == i) { vm.setCaptionSize(i) } },
+            captionStyleLabel = CAPTION_STYLE_NAMES[captionStyle.coerceIn(0, 3)], captionStyleChoices = CAPTION_STYLE_NAMES.mapIndexed { i, n -> Choice(n, captionStyle == i) { vm.setCaptionStyle(i) } },
         ) { sheet = null }
     }
 }
@@ -600,8 +679,8 @@ private fun android.content.Context.findActivity(): Activity? {
 }
 
 @Composable
-private fun QueueRow(v: VideoSummary, onPlay: () -> Unit, onRemove: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onPlay).padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun QueueRow(v: VideoSummary, current: Boolean, onPlay: () -> Unit, onRemove: (() -> Unit)?) {
+    Row(Modifier.fillMaxWidth().background(if (current) YgSurfaceVariant else Color.Transparent).clickable(onClick = onPlay).padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         AsyncImage(
             v.thumbnailUrl, null, contentScale = ContentScale.Crop,
             modifier = Modifier.width(96.dp).aspectRatio(16f / 9f).clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp)).background(YgSurfaceVariant),
@@ -610,6 +689,12 @@ private fun QueueRow(v: VideoSummary, onPlay: () -> Unit, onRemove: () -> Unit) 
             Text(v.title, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
             Text(v.author, color = YgMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        IconButton(onClick = onRemove) { Icon(Icons.Default.Close, "Hapus dari antrean", tint = YgMuted) }
+        if (onRemove != null) IconButton(onClick = onRemove) { Icon(Icons.Default.Close, "Hapus dari antrean", tint = YgMuted) }
     }
+}
+
+private fun shareVideo(context: android.content.Context, title: String, videoId: String, startSec: Long?) {
+    val url = "https://youtu.be/$videoId" + (startSec?.let { "?t=$it" } ?: "")
+    val send = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, "$title\n$url") }
+    context.startActivity(Intent.createChooser(send, "Bagikan video"))
 }

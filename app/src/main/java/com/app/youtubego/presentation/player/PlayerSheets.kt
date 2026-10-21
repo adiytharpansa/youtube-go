@@ -48,7 +48,7 @@ internal fun cleanHtml(s: String): String {
 }
 
 internal data class Choice(val label: String, val selected: Boolean, val onPick: () -> Unit)
-private enum class SettingsPage { ROOT, QUALITY, SPEED, CAPTIONS, SLEEP }
+private enum class SettingsPage { ROOT, QUALITY, SPEED, CAPTIONS, SLEEP, CAPTION_SIZE, CAPTION_STYLE }
 
 /** Panel pengaturan pemutar: Kualitas, Kecepatan pemutaran, Teks (CC). */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -60,6 +60,8 @@ internal fun PlayerSettingsSheet(
     loopOn: Boolean, onLoopChange: (Boolean) -> Unit,
     zoomFill: Boolean, onZoomChange: (Boolean) -> Unit,
     sleepLabel: String, sleepChoices: List<Choice>,
+    captionSizeLabel: String = "", captionSizeChoices: List<Choice> = emptyList(),
+    captionStyleLabel: String = "", captionStyleChoices: List<Choice> = emptyList(),
     onDismiss: () -> Unit,
 ) {
     var page by remember { mutableStateOf(SettingsPage.ROOT) }
@@ -69,6 +71,10 @@ internal fun PlayerSettingsSheet(
                 if (qualityChoices.isNotEmpty()) SettingRow(Icons.Default.Tune, "Kualitas", qualityLabel) { page = SettingsPage.QUALITY }
                 SettingRow(Icons.Default.Speed, "Kecepatan pemutaran", speedLabel) { page = SettingsPage.SPEED }
                 if (captionChoices.isNotEmpty()) SettingRow(Icons.Default.ClosedCaption, "Teks (CC)", captionLabel) { page = SettingsPage.CAPTIONS }
+                if (captionChoices.isNotEmpty() && captionSizeChoices.isNotEmpty()) {
+                    SettingRow(Icons.Default.FormatSize, "Ukuran teks CC", captionSizeLabel) { page = SettingsPage.CAPTION_SIZE }
+                    SettingRow(Icons.Default.Palette, "Gaya teks CC", captionStyleLabel) { page = SettingsPage.CAPTION_STYLE }
+                }
                 SettingRow(Icons.Default.Bedtime, "Timer tidur", sleepLabel) { page = SettingsPage.SLEEP }
                 SettingSwitchRow(Icons.Default.Repeat, "Ulangi video", loopOn, onLoopChange)
                 SettingSwitchRow(Icons.Default.AspectRatio, "Isi layar (potong tepi)", zoomFill, onZoomChange)
@@ -78,6 +84,8 @@ internal fun PlayerSettingsSheet(
                     SettingsPage.QUALITY -> "Kualitas" to qualityChoices
                     SettingsPage.SPEED -> "Kecepatan pemutaran" to speedChoices
                     SettingsPage.SLEEP -> "Timer tidur" to sleepChoices
+                    SettingsPage.CAPTION_SIZE -> "Ukuran teks CC" to captionSizeChoices
+                    SettingsPage.CAPTION_STYLE -> "Gaya teks CC" to captionStyleChoices
                     else -> "Teks (CC)" to captionChoices
                 }
                 ListItem(
@@ -124,27 +132,35 @@ private fun SettingRow(icon: ImageVector, label: String, value: String, onClick:
     )
 }
 
-/** Panel komentar (bottom sheet) dari ekstraktor NewPipe. */
+/** Panel komentar: urut Teratas (urutan YouTube) / Terbaru (dari komentar yang sudah dimuat); penanda waktu bisa diketuk. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun CommentsSheet(comments: UiState<List<CommentItem>>, onDismiss: () -> Unit) {
+internal fun CommentsSheet(comments: UiState<List<CommentItem>>, onSeek: (Long) -> Unit, onDismiss: () -> Unit) {
+    var sort by remember { mutableIntStateOf(0) }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = YgSurface) {
         Text("Komentar", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = sort == 0, onClick = { sort = 0 }, label = { Text("Teratas") })
+            FilterChip(selected = sort == 1, onClick = { sort = 1 }, label = { Text("Terbaru") })
+        }
         when (comments) {
             is UiState.Loading -> Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             is UiState.Error -> Text(comments.message, color = YgMuted, modifier = Modifier.padding(16.dp))
-            is UiState.Success -> if (comments.data.isEmpty()) {
-                Text("Belum ada komentar atau komentar dinonaktifkan.", color = YgMuted, modifier = Modifier.padding(16.dp))
-            } else LazyColumn(Modifier.heightIn(max = 560.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
-                items(comments.data) { c ->
-                    Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                        AsyncImage(c.avatarUrl, null, contentScale = ContentScale.Crop, modifier = Modifier.size(34.dp).clip(CircleShape).background(YgSurfaceVariant))
-                        Column(Modifier.padding(start = 12.dp)) {
-                            Text(listOf(c.author, formatRelativeTime(c.published)).filter { it.isNotBlank() }.joinToString(" • "), color = YgMuted, style = MaterialTheme.typography.labelMedium)
-                            Text(cleanHtml(c.content), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 2.dp))
-                            if (c.likeCount > 0) Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.ThumbUp, null, tint = YgMuted, modifier = Modifier.size(14.dp))
-                                Text(" ${formatViewsId(c.likeCount)}", color = YgMuted, style = MaterialTheme.typography.labelMedium)
+            is UiState.Success -> {
+                val list = remember(comments.data, sort) { if (sort == 1) comments.data.sortedByDescending { it.published } else comments.data }
+                if (list.isEmpty()) {
+                    Text("Belum ada komentar atau komentar dinonaktifkan.", color = YgMuted, modifier = Modifier.padding(16.dp))
+                } else LazyColumn(Modifier.heightIn(max = 560.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
+                    items(list) { c ->
+                        Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                            AsyncImage(c.avatarUrl, null, contentScale = ContentScale.Crop, modifier = Modifier.size(34.dp).clip(CircleShape).background(YgSurfaceVariant))
+                            Column(Modifier.padding(start = 12.dp)) {
+                                Text(listOf(c.author, formatRelativeTime(c.published)).filter { it.isNotBlank() }.joinToString(" • "), color = YgMuted, style = MaterialTheme.typography.labelMedium)
+                                TimestampText(cleanHtml(c.content), Modifier.padding(top = 2.dp)) { ms -> onSeek(ms); onDismiss() }
+                                if (c.likeCount > 0) Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.ThumbUp, null, tint = YgMuted, modifier = Modifier.size(14.dp))
+                                    Text(" ${formatViewsId(c.likeCount)}", color = YgMuted, style = MaterialTheme.typography.labelMedium)
+                                }
                             }
                         }
                     }
@@ -185,7 +201,7 @@ private val TIMESTAMP = Regex("""(?<![\d:])(?:(\d{1,2}):)?(\d{1,2}):(\d{2})(?![\
 
 /** Teks deskripsi dengan penanda waktu (mis. 1:23) yang bisa diketuk untuk melompat, seperti di YouTube. */
 @Composable
-private fun TimestampText(text: String, onSeek: (Long) -> Unit) {
+private fun TimestampText(text: String, modifier: Modifier = Modifier, onSeek: (Long) -> Unit) {
     val annotated = remember(text) {
         buildAnnotatedString {
             var last = 0
@@ -205,6 +221,7 @@ private fun TimestampText(text: String, onSeek: (Long) -> Unit) {
     }
     ClickableText(
         text = annotated,
+        modifier = modifier,
         style = MaterialTheme.typography.bodyMedium.copy(color = LocalContentColor.current),
         onClick = { off -> annotated.getStringAnnotations("seek", off, off).firstOrNull()?.let { onSeek(it.item.toLong()) } },
     )

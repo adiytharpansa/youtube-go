@@ -51,8 +51,9 @@ class PlaybackService : MediaSessionService() {
         override fun hasNextMediaItem(): Boolean = holder.upNextId != null
         override fun seekToNext() { holder.requestNext() }
         override fun seekToNextMediaItem() { holder.requestNext() }
-        override fun seekToPrevious() { seekTo(0) }
-        override fun seekToPreviousMediaItem() { seekTo(0) }
+        // Sebelumnya: >3 dtk atau tak ada video sebelumnya di playlist = ulang dari awal; selain itu pindah ke video sebelumnya.
+        override fun seekToPrevious() { if (currentPosition > 3_000L || holder.upPrevId == null) seekTo(0) else holder.requestPrevious() }
+        override fun seekToPreviousMediaItem() { seekToPrevious() }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session

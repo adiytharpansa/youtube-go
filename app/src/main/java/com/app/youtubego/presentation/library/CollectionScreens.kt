@@ -181,12 +181,14 @@ fun PlaylistDetailScreen(
     val videos by remember(playlistId) { vm.playlistVideos(playlistId) }.collectAsState(initial = emptyList())
     // Playlist dihapus dari tempat lain -> kembali.
     LaunchedEffect(playlists) { if (playlists.none { it.id == playlistId }) onBack() }
+    // Memutar dari playlist: Berikutnya/Sebelumnya di pemutar mengikuti urutan daftar ini.
+    val play: (String) -> Unit = { id -> vm.startPlaylist(name, videos); onVideoClick(id) }
     VideoListScaffold(
         title = name, videos = videos, emptyIcon = Icons.AutoMirrored.Filled.PlaylistPlay,
         emptyTitle = "Playlist masih kosong", emptyMessage = "Ketuk titik tiga pada video lalu pilih Simpan ke playlist.",
-        onBack = onBack, onVideoClick = onVideoClick, onChannelClick = onChannelClick, vm = vm,
+        onBack = onBack, onVideoClick = play, onChannelClick = onChannelClick, vm = vm,
         topActions = {
-            if (videos.isNotEmpty()) IconButton(onClick = { onVideoClick(videos.first().id) }) { Icon(Icons.Filled.PlayArrow, contentDescription = "Putar dari awal") }
+            if (videos.isNotEmpty()) IconButton(onClick = { play(videos.first().id) }) { Icon(Icons.Filled.PlayArrow, contentDescription = "Putar dari awal") }
         },
         extraActionsFor = { v -> listOf(VideoAction("Hapus dari playlist", Icons.Filled.Delete) { vm.removeFromPlaylist(playlistId, v.id) }) },
     )

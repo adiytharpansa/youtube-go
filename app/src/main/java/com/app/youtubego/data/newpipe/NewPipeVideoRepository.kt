@@ -249,7 +249,14 @@ class NewPipeVideoRepository @Inject constructor(
         ensureInit()
         val extractor = ServiceList.YouTube.getCommentsExtractor(watchUrl(id))
         extractor.fetchPage()
-        extractor.initialPage.items.filterIsInstance<CommentsInfoItem>().map {
+        // Halaman pertama + satu halaman lanjutan (terbaik-upaya) agar daftar komentar lebih lengkap.
+        val raw = ArrayList<CommentsInfoItem>()
+        var page = extractor.initialPage
+        raw += page.items.filterIsInstance<CommentsInfoItem>()
+        if (page.hasNextPage()) {
+            runCatching { extractor.getPage(page.nextPage) }.getOrNull()?.let { raw += it.items.filterIsInstance<CommentsInfoItem>() }
+        }
+        raw.map {
             CommentItem(
                 author = it.uploaderName ?: "",
                 avatarUrl = it.uploaderAvatars.maxByOrNull { im -> im.height }?.url ?: "",

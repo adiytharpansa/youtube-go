@@ -59,6 +59,7 @@ fun PlaybackHost(pauseMain: Boolean, onOpenVideo: (String) -> Unit, vm: MiniPlay
     BackgroundPlaybackEffect(vm.holder, backgroundPlay)
     val open by rememberUpdatedState(onOpenVideo)
     LaunchedEffect(Unit) { vm.holder.skipNext.collect { open(it) } }
+    LaunchedEffect(Unit) { vm.holder.skipPrev.collect { open(it) } }
     LaunchedEffect(pauseMain) { if (pauseMain) vm.holder.player.pause() }
 }
 

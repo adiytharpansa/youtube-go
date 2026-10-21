@@ -30,6 +30,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** Pemutaran playlist berurutan: nama + daftar video sesuai urutan tampil di layar playlist. */
+data class PlaylistRun(val name: String, val videos: List<VideoSummary>)
+
 /**
  * Satu-satunya ExoPlayer aplikasi untuk video penuh (Shorts punya pemutar sendiri yang singkat).
  *
@@ -61,6 +64,17 @@ class PlayerHolder @Inject constructor(
     /** Emisi id video saat pengguna menekan "Berikutnya" dari notifikasi; navigasi aplikasi yang membukanya. */
     val skipNext: SharedFlow<String> = _skipNext.asSharedFlow()
     fun requestNext() { upNextId?.let { _skipNext.tryEmit(it) } }
+
+    // ---- Playlist berurutan: Berikutnya/Sebelumnya mengikuti urutan playlist ----
+    private val _run = MutableStateFlow<PlaylistRun?>(null)
+    val playlistRun: StateFlow<PlaylistRun?> = _run.asStateFlow()
+    fun startPlaylist(name: String, videos: List<VideoSummary>) { _run.value = if (videos.isEmpty()) null else PlaylistRun(name, videos) }
+    fun clearPlaylist() { _run.value = null }
+    /** Video SEBELUMNYA di playlist yang diisi layar pemutar; dipakai tombol "Sebelumnya" di notifikasi/layar kunci. */
+    @Volatile var upPrevId: String? = null
+    private val _skipPrev = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val skipPrev: SharedFlow<String> = _skipPrev.asSharedFlow()
+    fun requestPrevious() { upPrevId?.let { _skipPrev.tryEmit(it) } }
 
     // ---- Antrean ("Tambahkan ke antrean"): diputar lebih dulu daripada rekomendasi saat video selesai / Berikutnya ----
     private val _queue = MutableStateFlow<List<VideoSummary>>(emptyList())
@@ -211,6 +225,7 @@ class PlayerHolder @Inject constructor(
         val p = player
         if (p.currentMediaItem?.mediaId != mediaId) return
         upNextId = null
+        upPrevId = null
         persistProgress()
         if (p.playbackState != Player.STATE_ENDED && p.currentPosition > 3_000) positions[mediaId] = p.currentPosition
         p.stop()

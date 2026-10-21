@@ -1,11 +1,21 @@
 # YouTube GO — Android Native (Kotlin)
 
 Aplikasi Android native dari konsep web app **YouTube GO**: minimalis, cepat, hemat data, Dark Theme default.
-Arsitektur: **MVVM + Clean Architecture** (data / domain / presentation), Hilt, Media3 ExoPlayer, Coil, Retrofit + Kotlinx Serialization, Coroutines & Flow.
+Arsitektur: **MVVM + Clean Architecture** (data / domain / presentation), Hilt, Media3 ExoPlayer, Coil, NewPipeExtractor, Kotlinx Serialization, Coroutines & Flow.
 
-**API:** Invidious API sesuai dokumen yang diberikan pemilik proyek — semua endpoint JSON di bawah `/api/v1`
-melalui proksi Vercel YouTube GO yang sudah live (thumbnail & stream wajib lewat proksi karena dipagari anti-bot Anubis).
+**API:** tanpa server perantara — semua data & stream diekstrak langsung di perangkat dari YouTube memakai NewPipeExtractor (sejak v1.45; jalur Invidious/proksi Vercel sudah dibuang).
 Rincian lengkap ada di [BLUEPRINT.md](BLUEPRINT.md).
+
+## Baru di v1.49 - teks CC, komentar, geser kecilkan interaktif
+- **Teks CC**: Pengaturan pemutar punya "Ukuran teks CC" (Kecil..Sangat besar) dan "Gaya teks CC" (latar transparan, tanpa latar, kuning, latar hitam); pilihan tersimpan.
+- **Komentar**: urut Teratas / Terbaru (dari komentar yang sudah dimuat), penanda waktu di komentar bisa diketuk untuk melompat, memuat ~2 halaman komentar.
+- **Geser turun di pemutar** (portrait): layar ikut turun & mengecil mengikuti jari; lepas melewati ambang = kecilkan ke mini player, selain itu kembali.
+
+## Baru di v1.48 - playlist berurutan, bilah lanjut menonton, bagikan dengan waktu, kunci layar
+- **Playlist berurutan**: putar dari layar playlist (tombol putar atau ketuk video); Sebelumnya/Berikutnya di pemutar & notifikasi mengikuti urutan playlist, panel playlist tampil di halaman pemutar. Keluar otomatis saat pindah ke video di luar playlist.
+- **Bilah merah** di dasar thumbnail untuk video yang sudah sebagian ditonton (semua daftar video).
+- **Bagikan**: bila sudah ditonton >= 5 dtk, ada pilihan "Mulai dari 1:23" (link `?t=`).
+- **Kunci layar** di layar penuh (ikon gembok di bar atas): gestur & kontrol nonaktif, ketuk untuk memunculkan tombol buka kunci.
 
 ## Baru di v1.47 - lanjut menonton, antrean, hemat baterai
 - **Lanjut menonton**: posisi tiap video disimpan permanen (tiap 10 dtk, saat jeda, saat keluar) dan dilanjutkan saat dibuka lagi; video yang hampir/sudah selesai mulai dari awal.

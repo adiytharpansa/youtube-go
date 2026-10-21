@@ -106,8 +106,13 @@ internal fun YtPlayerOverlay(
     storyboard: Storyboard? = null,
     chapters: List<Chapter> = emptyList(),
     onOpenChapters: (() -> Unit)? = null,
+    /** Video sebelumnya di playlist (null = tidak ada: tombol hanya mengulang dari awal). */
+    onPrevious: (() -> Unit)? = null,
     /** Cubit dua jari: true = isi layar (zoom), false = sesuai layar (seperti YouTube). */
     onPinchZoom: (Boolean) -> Unit = {},
+    /** Geser turun di portrait: delta px tiap gerakan; layar pemutar mengikuti jari lalu memutuskan kecilkan saat dilepas. */
+    onMinimizeDrag: (Float) -> Unit = {},
+    onMinimizeDragEnd: () -> Unit = {},
 ) {
     var visible by remember { mutableStateOf(true) }
     var interaction by remember { mutableIntStateOf(0) }
@@ -137,7 +142,11 @@ internal fun YtPlayerOverlay(
     val onBackNow by rememberUpdatedState(onBack)
     val onFullscreenNow by rememberUpdatedState(onToggleFullscreen)
     val onPinchNow by rememberUpdatedState(onPinchZoom)
+    val onMinDragNow by rememberUpdatedState(onMinimizeDrag)
+    val onMinEndNow by rememberUpdatedState(onMinimizeDragEnd)
     var pinchLabel by remember { mutableStateOf<String?>(null) }
+    var locked by remember { mutableStateOf(false) }
+    LaunchedEffect(isFullscreen) { if (!isFullscreen) locked = false }
     LaunchedEffect(pinchLabel) { if (pinchLabel != null) { delay(900); pinchLabel = null } }
     /** Lompat 10 dtk per ketukan; ketukan beruntun ke arah sama menumpuk (10 -> 20 -> 30 dtk) seperti YouTube. */
     fun doSeek(dir: Int) {
@@ -218,13 +227,14 @@ internal fun YtPlayerOverlay(
                             val v = (startVal - acc / size.height * 1.4f).coerceIn(0f, 1f)
                             if (left) { setBrightness(v); hud = "Kecerahan" to v } else { setVolume(v); hud = "Volume" to v }
                             hudStamp++
-                        }
+                        } else if (acc > 0f) onMinDragNow(d) // portrait: turun = layar ikut turun (mengecil)
                     },
                     onDragEnd = {
                         if (!fullscreenNow) {
-                            if (acc < -90f) onFullscreenNow() else if (acc > 90f) onBackNow() // geser turun = kecilkan (mini player)
+                            if (acc < -90f) onFullscreenNow() else onMinEndNow() // turun: lepas lewat ambang = kecilkan, selain itu kembali
                         }
                     },
+                    onDragCancel = { if (!fullscreenNow) onMinEndNow() },
                 )
             }.pointerInput(player) {
                 // Cubit dua jari: lebarkan = isi layar, rapatkan = sesuai layar. Hanya bereaksi bila >= 2 jari.
@@ -300,6 +310,7 @@ internal fun YtPlayerOverlay(
                     }
                     if (isFullscreen) Text(title, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                     else Spacer(Modifier.weight(1f))
+                    if (isFullscreen) IconButton(onClick = { locked = true; visible = false }) { Icon(Icons.Default.Lock, "Kunci layar", tint = Color.White) }
                     if (hasCaptions) IconButton(onClick = { onToggleCaptions(); interaction++ }) {
                         Icon(if (captionsOn) Icons.Default.ClosedCaption else Icons.Default.ClosedCaptionOff, "Teks", tint = Color.White)
                     }
@@ -323,9 +334,10 @@ internal fun YtPlayerOverlay(
                 } else if (!buffering) {
                     Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                         IconButton(
-                            onClick = { interaction++; player.seekTo(0) }, enabled = position > 3_000L,
-                            modifier = Modifier.size(48.dp).alpha(if (position > 3_000L) 1f else 0.4f).background(Color.Black.copy(0.35f), CircleShape),
-                        ) { Icon(Icons.Default.SkipPrevious, "Dari awal", tint = Color.White, modifier = Modifier.size(28.dp)) }
+                            onClick = { interaction++; if (position > 3_000L || onPrevious == null) player.seekTo(0) else onPrevious() },
+                            enabled = position > 3_000L || onPrevious != null,
+                            modifier = Modifier.size(48.dp).alpha(if (position > 3_000L || onPrevious != null) 1f else 0.4f).background(Color.Black.copy(0.35f), CircleShape),
+                        ) { Icon(Icons.Default.SkipPrevious, if (position > 3_000L || onPrevious == null) "Dari awal" else "Video sebelumnya", tint = Color.White, modifier = Modifier.size(28.dp)) }
                         IconButton(
                             onClick = {
                                 interaction++
@@ -374,6 +386,19 @@ internal fun YtPlayerOverlay(
                         modifier = Modifier.padding(end = 10.dp),
                     )
                 }
+            }
+        }
+
+        // Kunci layar (layar penuh): semua gestur & kontrol dinonaktifkan; ketuk memunculkan tombol buka kunci sesaat.
+        if (locked && isFullscreen) {
+            var showUnlock by remember { mutableStateOf(true) }
+            var unlockStamp by remember { mutableIntStateOf(0) }
+            LaunchedEffect(showUnlock, unlockStamp) { if (showUnlock) { delay(2500); showUnlock = false } }
+            Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { showUnlock = true; unlockStamp++ } }) {
+                if (showUnlock) IconButton(
+                    onClick = { locked = false; visible = true; interaction++ },
+                    modifier = Modifier.align(Alignment.CenterStart).padding(start = 28.dp).background(Color.Black.copy(0.6f), CircleShape),
+                ) { Icon(Icons.Default.LockOpen, "Buka kunci", tint = Color.White) }
             }
         }
     }

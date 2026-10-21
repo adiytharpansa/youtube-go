@@ -69,6 +69,8 @@ fun VideoCardPro(
     modifier: Modifier = Modifier,
     onChannelClick: (String) -> Unit = {},
     actions: List<VideoAction> = emptyList(),
+    /** 0..1 = bagian video yang sudah ditonton (bilah merah di dasar thumbnail); 0 = tidak tampil. */
+    watchedFraction: Float = 0f,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val meta = listOfNotNull(
@@ -87,6 +89,9 @@ fun VideoCardPro(
                     .crossfade(true).diskCachePolicy(CachePolicy.ENABLED).memoryCachePolicy(CachePolicy.ENABLED).build(),
                 contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
             )
+            if (watchedFraction > 0f) Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(3.dp).background(Color.White.copy(0.35f))) {
+                Box(Modifier.fillMaxWidth(watchedFraction.coerceIn(0f, 1f)).fillMaxHeight().background(Color(0xFFFF0000)))
+            }
             Box(
                 Modifier.align(Alignment.BottomEnd).padding(8.dp).clip(MaterialTheme.shapes.extraSmall)
                     .background(if (video.isLive) YgAccent else Color.Black.copy(0.78f))
