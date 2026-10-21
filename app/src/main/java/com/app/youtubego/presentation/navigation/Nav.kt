@@ -1,7 +1,12 @@
 package com.app.youtubego.presentation.navigation
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -78,6 +83,9 @@ private val tabs = listOf(
 )
 
 private fun isTabRoute(route: String?): Boolean = route != null && tabs.any { it.route == route }
+private fun isPlayerRoute(route: String?): Boolean = route != null && route.startsWith("player/")
+/** Kurva "emphasized decelerate" Material: cepat di awal, mendarat halus. */
+private val EnterEase = CubicBezierEasing(0.2f, 0f, 0f, 1f)
 
 @Composable
 fun YoutubeGoNavHost() {
@@ -157,16 +165,42 @@ fun YoutubeGoNavHost() {
                 nav, startDestination = Routes.HOME, modifier = Modifier.padding(bottom = pad.calculateBottomPadding()),
                 // Transisi bawaan 700 ms terasa lambat. Antar tab utama: pudar + sedikit membesar (220 ms, halus);
                 // halaman lain tetap pudar cepat 90-160 ms supaya terasa instan.
+                // Transisi ala YouTube/Material: pemutar naik dari bawah (turun lagi saat kembali), halaman lain geser
+                // horizontal tipis + pudar, antar tab & antar video hanya pudar. Semua <= 320 ms agar terasa instan.
                 enterTransition = {
-                    if (isTabRoute(initialState.destination.route) && isTabRoute(targetState.destination.route))
-                        fadeIn(tween(220, easing = FastOutSlowInEasing)) + scaleIn(initialScale = 0.985f, animationSpec = tween(220, easing = FastOutSlowInEasing))
-                    else fadeIn(tween(160))
+                    val from = initialState.destination.route; val to = targetState.destination.route
+                    when {
+                        isTabRoute(from) && isTabRoute(to) ->
+                            fadeIn(tween(220, easing = FastOutSlowInEasing)) + scaleIn(initialScale = 0.985f, animationSpec = tween(220, easing = FastOutSlowInEasing))
+                        isPlayerRoute(from) && isPlayerRoute(to) -> fadeIn(tween(220))
+                        isPlayerRoute(to) -> slideInVertically(tween(320, easing = EnterEase)) { it / 10 } + fadeIn(tween(220))
+                        else -> slideInHorizontally(tween(300, easing = EnterEase)) { it / 6 } + fadeIn(tween(220))
+                    }
                 },
                 exitTransition = {
-                    if (isTabRoute(initialState.destination.route) && isTabRoute(targetState.destination.route)) fadeOut(tween(120)) else fadeOut(tween(90))
+                    val from = initialState.destination.route; val to = targetState.destination.route
+                    when {
+                        isTabRoute(from) && isTabRoute(to) -> fadeOut(tween(120))
+                        isPlayerRoute(to) -> fadeOut(tween(220))
+                        else -> slideOutHorizontally(tween(300, easing = EnterEase)) { -it / 8 } + fadeOut(tween(200))
+                    }
                 },
-                popEnterTransition = { fadeIn(tween(160)) },
-                popExitTransition = { fadeOut(tween(90)) },
+                popEnterTransition = {
+                    val from = initialState.destination.route; val to = targetState.destination.route
+                    when {
+                        isTabRoute(from) && isTabRoute(to) -> fadeIn(tween(200))
+                        isPlayerRoute(from) -> fadeIn(tween(220))
+                        else -> slideInHorizontally(tween(300, easing = EnterEase)) { -it / 8 } + fadeIn(tween(220))
+                    }
+                },
+                popExitTransition = {
+                    val from = initialState.destination.route; val to = targetState.destination.route
+                    when {
+                        isTabRoute(from) && isTabRoute(to) -> fadeOut(tween(120))
+                        isPlayerRoute(from) -> slideOutVertically(tween(260, easing = FastOutSlowInEasing)) { it / 6 } + fadeOut(tween(200))
+                        else -> slideOutHorizontally(tween(260, easing = FastOutSlowInEasing)) { it / 6 } + fadeOut(tween(200))
+                    }
+                },
             ) {
                 composable(Routes.HOME) {
                     HomeScreen(onVideoClick = openPlayer, onSearchClick = { nav.navigate(Routes.SEARCH) }, onChannelClick = openChannel)
