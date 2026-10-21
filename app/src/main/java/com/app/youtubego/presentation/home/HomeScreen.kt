@@ -61,15 +61,9 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Image(painterResource(R.drawable.ic_logo_mark), contentDescription = null, modifier = Modifier.size(30.dp))
-                        Text(
-                            buildAnnotatedString {
-                                withStyle(SpanStyle(fontWeight = FontWeight.ExtraBold)) { append("YouTube GO") }
-                                withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = YgAccent)) { append(" : Next") }
-                            },
-                            maxLines = 1, style = MaterialTheme.typography.titleLarge,
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Image(painterResource(R.drawable.ic_logo_mark), contentDescription = null, modifier = Modifier.size(34.dp))
+                        Text("YouTube GO", fontWeight = FontWeight.ExtraBold, maxLines = 1, style = MaterialTheme.typography.titleLarge)
                     }
                 },
                 actions = {
