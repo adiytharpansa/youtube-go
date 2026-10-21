@@ -5,9 +5,11 @@ import android.content.Intent
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.app.youtubego.MainActivity
+import com.app.youtubego.R
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -34,6 +36,14 @@ class PlaybackService : MediaSessionService() {
         val player = holder.player
         val open = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        // Notifikasi media (judul, channel, thumbnail, putar/jeda/berikutnya) di bayangan notifikasi & layar kunci
+        // saat aplikasi ditinggalkan. Ikon kecil + nama kanal sendiri agar jelas milik aplikasi ini.
+        setMediaNotificationProvider(
+            DefaultMediaNotificationProvider.Builder(this)
+                .setChannelId(NOTIF_CHANNEL_ID)
+                .setChannelName(R.string.playback_channel_name)
+                .build().apply { setSmallIcon(R.drawable.ic_stat_play) },
         )
         session = MediaSession.Builder(this, SkipPlayer(player)).setSessionActivity(open).build()
         player.addListener(idleWatcher)
@@ -72,4 +82,6 @@ class PlaybackService : MediaSessionService() {
         session = null
         super.onDestroy()
     }
+
+    private companion object { const val NOTIF_CHANNEL_ID = "ygo_playback" }
 }
