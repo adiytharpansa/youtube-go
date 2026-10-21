@@ -97,11 +97,19 @@ fun ErrorBox(message: String, onRetry: () -> Unit) {
 @Composable
 fun PrefetchThumbnails(videos: List<VideoSummary>) {
     val ctx = LocalContext.current
+    // Hanya thumbnail BARU yang diantre (maks. 12 tiap kali daftar bertambah). Dulu seluruh daftar diantre ulang
+    // setiap halaman baru dimuat: ratusan decode bersamaan di Beranda -> lonjakan memori -> aplikasi tertutup sendiri.
+    val done = remember { HashSet<String>() }
     LaunchedEffect(videos.size) {
         val loader = coil.Coil.imageLoader(ctx)
-        videos.forEach { v ->
-            if (v.thumbnailUrl.isNotBlank()) loader.enqueue(
-                ImageRequest.Builder(ctx).data(v.thumbnailUrl).size(400, 225)
+        var queued = 0
+        for (v in videos) {
+            if (queued >= 12) break
+            val u = v.thumbnailUrl
+            if (u.isBlank() || !done.add(u)) continue
+            queued++
+            loader.enqueue(
+                ImageRequest.Builder(ctx).data(u).size(400, 225)
                     .memoryCachePolicy(CachePolicy.DISABLED).diskCachePolicy(CachePolicy.ENABLED).build()
             )
         }

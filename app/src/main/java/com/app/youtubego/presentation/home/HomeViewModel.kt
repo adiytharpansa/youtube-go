@@ -12,6 +12,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import com.app.youtubego.domain.usecase.toFriendlyMessage
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
@@ -56,7 +58,7 @@ class HomeViewModel @Inject constructor(
                 loadingMore = false, endReached = false, loadMoreFailed = false)
         }
         val flow = if (category == HomeCategory.FOR_YOU) getForYou() else getTrending(category)
-        job = flow.onEach { r ->
+        job = flow.catch { emit(UiState.Error(it.toFriendlyMessage())) }.onEach { r ->
             when {
                 r is UiState.Loading -> if (!silent) _state.update { it.copy(videos = r) }
                 silent && r is UiState.Error && _state.value.videos is UiState.Success -> _state.update { it.copy(refreshing = false) }
@@ -89,7 +91,10 @@ class HomeViewModel @Inject constructor(
             while (fresh.isEmpty() && !ended && !failed && tries < 3) {
                 tries++
                 val next = page + 1
-                loadMoreHome(category, next).fold(
+                val res = try { loadMoreHome(category, next) }
+                    catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                    catch (e: Exception) { Result.failure(e) }
+                res.fold(
                     onSuccess = { items ->
                         page = next
                         if (items.isEmpty()) ended = true else fresh = items.filter { it.id.isNotBlank() && known.add(it.id) }
