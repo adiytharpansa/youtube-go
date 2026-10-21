@@ -1,4 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="playback_channel_name">Pemutaran media</string>
+    <string name="player_views">%1$s x ditonton</string>
+    <string name="player_more">…selengkapnya</string>
+    <string name="player_open_description">Lihat deskripsi lengkap</string>
+    <string name="player_subscribe">Berlangganan</string>
+    <string name="player_subscribed">Terlangganan</string>
+    <string name="player_like">Suka</string>
+    <string name="player_share">Bagikan</string>
+    <string name="player_save">Simpan</string>
+    <string name="player_saved">Tersimpan</string>
+    <string name="player_playlist">Playlist</string>
+    <string name="player_download">Unduh</string>
+    <string name="player_downloaded">Diunduh</string>
+    <string name="player_downloading">Mengunduh…</string>
+    <string name="player_resume_download">Lanjutkan unduh</string>
+    <string name="player_queue">Antrean (%1$d)</string>
+    <string name="player_next_videos">Video berikutnya</string>
+    <string name="player_autoplay">Putar otomatis</string>
+    <string name="comments_title">Komentar</string>
+    <string name="comments_loading">Memuat komentar…</string>
+    <string name="comments_unavailable">Komentar tidak tersedia saat ini.</string>
+    <string name="comments_empty">Belum ada komentar.</string>
+    <string name="comments_open">Buka komentar</string>
+    <string name="channel_open">Buka channel %1$s</string>
 </resources>

@@ -26,8 +26,8 @@ enum class ThemeMode(val id: Int, val label: String, val description: String) {
     fun resolveDark(systemDark: Boolean): Boolean = when (this) { SYSTEM -> systemDark; LIGHT -> false; DARK -> true }
 
     companion object {
-        // Bawaan: TERANG (putih). Ganti ke SYSTEM/DARK bila ingin bawaan lain.
-        val Default = LIGHT
+        // Bawaan: ikut tema HP (SYSTEM). Ganti ke LIGHT/DARK bila ingin bawaan lain.
+        val Default = SYSTEM
         fun fromId(id: Int): ThemeMode = values().firstOrNull { it.id == id } ?: Default
     }
 }

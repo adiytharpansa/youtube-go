@@ -65,6 +65,8 @@ import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import coil.compose.AsyncImage
+import androidx.compose.ui.res.stringResource
+import com.app.youtubego.R
 import com.app.youtubego.domain.model.CaptionTrack
 import com.app.youtubego.domain.model.CommentItem
 import com.app.youtubego.domain.model.StreamOption
@@ -466,7 +468,7 @@ fun PlayerScreen(
         if (!isFullscreen && !inPip) {
             Box(Modifier.weight(1f).fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
                 when (val s = state) {
-                    is UiState.Loading -> Column { VideoCardShimmer() }
+                    is UiState.Loading -> PlayerInfoShimmer()
                     is UiState.Error -> ErrorBox(s.message) { vm.retry() }
                     is UiState.Success -> {
                         val d = s.data
@@ -474,13 +476,13 @@ fun PlayerScreen(
                         val saved = videoId in savedIds
                         val subscribed = d.summary.authorId in subscribedIds
                         LazyColumn(Modifier.fillMaxSize()) {
-                            item { TitleBlock(d) { sheet = PlayerSheet.DESCRIPTION } }
-                            item { ChannelRow(d, subscribed, onOpen = { onChannelClick(d.summary.authorId) }) { tick(); vm.toggleSubscribe(d.summary.authorId) } }
-                            item {
+                            item(key = "title") { TitleBlock(d) { sheet = PlayerSheet.DESCRIPTION } }
+                            item(key = "channel") { ChannelRow(d, subscribed, onOpen = { onChannelClick(d.summary.authorId) }) { tick(); vm.toggleSubscribe(d.summary.authorId) } }
+                            item(key = "actions") {
                                 val downloadStatus = downloadItems.firstOrNull { it.video.id == videoId }?.status
                                 ActionRow(
                                     downloadStatus = downloadStatus, onDownload = vm::download, onPlaylist = { playlistDialog = true },
-                                    likeLabel = if (d.likeCount + (if (liked) 1 else 0) > 0) formatViewsId(d.likeCount + (if (liked) 1 else 0)) else "Suka",
+                                    likeLabel = if (d.likeCount + (if (liked) 1 else 0) > 0) formatViewsId(d.likeCount + (if (liked) 1 else 0)) else stringResource(R.string.player_like),
                                     liked = liked, saved = saved,
                                     onLike = { tick(); vm.toggleLike() }, onSave = { tick(); vm.toggleSave() },
                                     onShare = {
@@ -491,10 +493,10 @@ fun PlayerScreen(
                                     },
                                 )
                             }
-                            item { CommentsTeaser(comments) { sheet = PlayerSheet.COMMENTS } }
+                            item(key = "comments") { CommentsTeaser(comments) { sheet = PlayerSheet.COMMENTS } }
                             if (queue.isNotEmpty()) {
                                 item {
-                                    Text("Antrean (${queue.size})", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall,
+                                    Text(stringResource(R.string.player_queue, queue.size), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall,
                                         modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 4.dp))
                                 }
                                 items(queue, key = { "q_" + it.id }) { v -> QueueRow(v, current = false, onPlay = { onVideoClick(v.id) }, onRemove = { holder.removeFromQueue(v.id) }) }
@@ -508,14 +510,7 @@ fun PlayerScreen(
                                     QueueRow(v, current = v.id == videoId, onPlay = { if (v.id != videoId) onVideoClick(v.id) }, onRemove = null)
                                 }
                             }
-                            item {
-                                Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text("Video berikutnya", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                                    Text("Putar otomatis", color = YgMuted, style = MaterialTheme.typography.labelMedium)
-                                    Switch(checked = autoplay, onCheckedChange = vm::setAutoplay, modifier = Modifier.padding(start = 8.dp),
-                                        colors = SwitchDefaults.colors(checkedTrackColor = YtRed))
-                                }
-                            }
+                            item(key = "next_header") { NextVideosHeader(autoplay, vm::setAutoplay) }
                             items(d.recommendations, key = { it.id }) { v -> VideoItem(v, onVideoClick, onChannelClick, libVm) }
                         }
                         when (sheet) {
@@ -565,90 +560,6 @@ fun PlayerScreen(
     }
 }
 
-@Composable
-private fun TitleBlock(d: VideoDetail, onMore: () -> Unit) {
-    val meta = listOfNotNull(
-        "${formatViewsId(d.summary.viewCount)} x ditonton",
-        formatRelativeTime(d.summary.published).takeIf { it.isNotEmpty() },
-    ).joinToString(" • ")
-    Column(Modifier.fillMaxWidth().clickable(onClick = onMore).padding(horizontal = 14.dp, vertical = 12.dp)) {
-        Text(d.summary.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        Text("$meta  ...selengkapnya", color = YgMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
-    }
-}
-
-@Composable
-private fun ChannelRow(d: VideoDetail, subscribed: Boolean, onOpen: () -> Unit, onSubscribe: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        AsyncImage(d.summary.authorAvatarUrl, null, contentScale = ContentScale.Crop, modifier = Modifier.size(40.dp).clip(CircleShape).background(YgSurfaceVariant).clickable(enabled = d.summary.authorId.isNotBlank(), onClick = onOpen))
-        Column(Modifier.weight(1f).padding(horizontal = 12.dp).clickable(enabled = d.summary.authorId.isNotBlank(), onClick = onOpen)) {
-            Text(d.summary.author, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (d.subscriberText.isNotBlank()) Text(d.subscriberText, color = YgMuted, style = MaterialTheme.typography.labelMedium, maxLines = 1)
-        }
-        if (d.summary.authorId.isNotBlank()) {
-            if (subscribed) FilledTonalButton(onClick = onSubscribe) {
-                Icon(Icons.Default.NotificationsActive, null, modifier = Modifier.size(18.dp)); Text(" Terlangganan")
-            } else Button(onClick = onSubscribe, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onBackground, contentColor = MaterialTheme.colorScheme.background)) { Text("Berlangganan") }
-        }
-    }
-}
-
-@Composable
-private fun ActionRow(
-    downloadStatus: DownloadStatus?, onDownload: () -> Unit, onPlaylist: () -> Unit,
-    likeLabel: String, liked: Boolean, saved: Boolean, onLike: () -> Unit, onSave: () -> Unit, onShare: () -> Unit,
-) {
-    LazyRow(contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        item { ActionPill(if (liked) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp, likeLabel, liked, onLike) }
-        item { ActionPill(Icons.Filled.Share, "Bagikan", false, onShare) }
-        item { ActionPill(if (saved) Icons.Filled.WatchLater else Icons.Outlined.WatchLater, if (saved) "Tersimpan" else "Simpan", saved, onSave) }
-        item { ActionPill(Icons.AutoMirrored.Filled.PlaylistAdd, "Playlist", false, onPlaylist) }
-        item {
-            val label = when (downloadStatus) {
-                DownloadStatus.DONE -> "Diunduh"
-                DownloadStatus.DOWNLOADING -> "Mengunduh..."
-                DownloadStatus.PAUSED, DownloadStatus.FAILED -> "Lanjutkan unduh"
-                null -> "Unduh"
-            }
-            ActionPill(if (downloadStatus == DownloadStatus.DONE) Icons.Filled.DownloadDone else Icons.Filled.Download, label, downloadStatus == DownloadStatus.DONE) {
-                if (downloadStatus != DownloadStatus.DONE && downloadStatus != DownloadStatus.DOWNLOADING) onDownload()
-            }
-        }
-    }
-}
-
-@Composable
-private fun ActionPill(icon: ImageVector, label: String, active: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier.clip(CircleShape).background(YgSurfaceVariant).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icon, null, tint = if (active) YtRed else MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
-        Text(" $label", style = MaterialTheme.typography.labelLarge)
-    }
-}
-
-@Composable
-private fun CommentsTeaser(comments: UiState<List<CommentItem>>, onOpen: () -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp).clip(MaterialTheme.shapes.medium)
-            .background(YgSurfaceVariant).clickable(onClick = onOpen).padding(12.dp),
-    ) {
-        Text("Komentar", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
-        when (comments) {
-            is UiState.Loading -> Text("Memuat komentar...", color = YgMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
-            is UiState.Error -> Text("Komentar tidak tersedia saat ini.", color = YgMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
-            is UiState.Success -> {
-                val top = comments.data.firstOrNull()
-                if (top == null) Text("Belum ada komentar.", color = YgMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
-                else Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    AsyncImage(top.avatarUrl, null, contentScale = ContentScale.Crop, modifier = Modifier.size(24.dp).clip(CircleShape).background(Color.DarkGray))
-                    Text(cleanHtml(top.content), maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 10.dp))
-                }
-            }
-        }
-    }
-}
 
 private fun speedText(s: Float): String = if (s == 1f) "Normal" else "${s}x".replace(".0x", "x")
 
