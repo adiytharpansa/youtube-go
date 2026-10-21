@@ -36,9 +36,9 @@ enum class ThemeMode(val id: Int, val label: String, val description: String) {
 @Composable
 fun ThemeMode.isDark(): Boolean = resolveDark(isSystemInDarkTheme())
 
-// Aksen sama di kedua tema: gradasi #FF2E4D -> #FF6A3D.
-val YgAccent = Color(0xFFFF2E4D)
-val YgAccent2 = Color(0xFFFF6A3D)
+// Aksen sama di kedua tema: gradasi #FF3358 -> #FF7340 (sedikit lebih cerah agar "menyala" di atas hitam AMOLED).
+val YgAccent = Color(0xFFFF3358)
+val YgAccent2 = Color(0xFFFF7340)
 
 /** Satu set warna dasar per tema. Dibaca lewat YgBackground, YgSurface, dst. (otomatis mengikuti tema aktif). */
 @Immutable
@@ -47,11 +47,13 @@ class YgPalette(
     val outline: Color, val onSurface: Color, val muted: Color,
 )
 
-// Token warna PERSIS dari web app (CSS :root dark): bg #0A0B0D, surface #101114, chip #1C1E23,
-// garis #23252B, teks #F3F4F6, redup #9AA0AB.
+// AMOLED: latar HITAM MURNI (#000000, piksel OLED mati total = hemat baterai + kontras tak terbatas).
+// Elevasi dibuat lewat anak tangga abu sangat gelap (netral, tanpa rona biru/ungu), bukan bayangan:
+// background #000000 -> surface #0B0B0E -> chip #17171B -> tinggi #222227; garis tipis #26262B.
+// Teks #F5F5F7 (bukan putih murni, mengurangi silau/halo) dan redup #9D9DA8 (kontras ~7:1 di atas hitam).
 val DarkPalette = YgPalette(
-    background = Color(0xFF0A0B0D), surface = Color(0xFF101114), surfaceVariant = Color(0xFF1C1E23), surfaceHigh = Color(0xFF2A2D35),
-    outline = Color(0xFF23252B), onSurface = Color(0xFFF3F4F6), muted = Color(0xFF9AA0AB),
+    background = Color(0xFF000000), surface = Color(0xFF0B0B0E), surfaceVariant = Color(0xFF17171B), surfaceHigh = Color(0xFF222227),
+    outline = Color(0xFF26262B), onSurface = Color(0xFFF5F5F7), muted = Color(0xFF9D9DA8),
 )
 val LightPalette = YgPalette(
     background = Color(0xFFFFFFFF), surface = Color(0xFFF6F7F9), surfaceVariant = Color(0xFFEBEDF0), surfaceHigh = Color(0xFFDDE0E5),
@@ -72,6 +74,15 @@ private val DarkColors = darkColorScheme(
     primary = YgAccent, onPrimary = Color.White, secondary = YgAccent2, onSecondary = Color.White, background = DarkPalette.background, surface = DarkPalette.surface,
     surfaceVariant = DarkPalette.surfaceVariant, outline = DarkPalette.outline, onBackground = DarkPalette.onSurface,
     onSurface = DarkPalette.onSurface, onSurfaceVariant = DarkPalette.muted, error = Color(0xFFFF5B74),
+    outlineVariant = Color(0xFF1C1C21),
+    // Tanpa rona ungu bawaan M3 pada elevasi tonal; dialog, menu, switch, dan lembar bawah memakai anak tangga netral AMOLED.
+    surfaceTint = Color.Transparent, surfaceDim = Color(0xFF000000), surfaceBright = Color(0xFF222227),
+    surfaceContainerLowest = Color(0xFF000000), surfaceContainerLow = Color(0xFF0B0B0E), surfaceContainer = Color(0xFF111115),
+    surfaceContainerHigh = Color(0xFF17171B), surfaceContainerHighest = Color(0xFF222227),
+    primaryContainer = Color(0xFF3A0E18), onPrimaryContainer = Color(0xFFFFD9DF),
+    secondaryContainer = Color(0xFF2A1810), onSecondaryContainer = Color(0xFFFFDBCF),
+    inverseSurface = Color(0xFFF5F5F7), inverseOnSurface = Color(0xFF000000), inversePrimary = Color(0xFFD01E43),
+    scrim = Color(0xFF000000),
 )
 private val LightColors = lightColorScheme(
     primary = YgAccent, onPrimary = Color.White, secondary = YgAccent2, onSecondary = Color.White, background = LightPalette.background, surface = LightPalette.surface,

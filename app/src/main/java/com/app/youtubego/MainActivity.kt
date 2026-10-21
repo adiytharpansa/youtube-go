@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity() {
     private fun applyTheme(dark: Boolean) {
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
-            navigationBarStyle = SystemBarStyle.auto(Color.argb(0xe6, 0xFF, 0xFF, 0xFF), Color.argb(0x80, 0x1b, 0x1b, 0x1b)) { dark },
+            navigationBarStyle = SystemBarStyle.auto(Color.argb(0xe6, 0xFF, 0xFF, 0xFF), Color.argb(0x80, 0x00, 0x00, 0x00)) { dark },
         )
         // Warna jendela di balik Compose (terlihat sesaat saat keyboard/rotasi) ikut tema.
         window.setBackgroundDrawable(ColorDrawable((if (dark) DarkPalette.background else LightPalette.background).toArgb()))

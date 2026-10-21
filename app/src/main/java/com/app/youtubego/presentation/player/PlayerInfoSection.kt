@@ -243,22 +243,22 @@ internal fun PlayerInfoShimmer() {
     }
 }
 
-@Preview(showBackground = true, backgroundColor = 0xFF0A0B0D)
+@Preview(showBackground = true, backgroundColor = 0xFF000000)
 @Composable
 private fun ActionRowPreview() = YouTubeGOTheme(darkTheme = true) {
     ActionRow(downloadStatus = null, onDownload = {}, onPlaylist = {}, likeLabel = "17,9 rb", liked = true, saved = false, onLike = {}, onSave = {}, onShare = {})
 }
 
-@Preview(showBackground = true, backgroundColor = 0xFF0A0B0D)
+@Preview(showBackground = true, backgroundColor = 0xFF000000)
 @Composable
 private fun CommentsTeaserPreview() = YouTubeGOTheme(darkTheme = true) {
     CommentsTeaser(UiState.Success(listOf(CommentItem("Budi", "", "kesedihan yg bisa dirasakan hanya pada manusia yg mempunyai hati", 0L, 3L))), onOpen = {})
 }
 
-@Preview(showBackground = true, backgroundColor = 0xFF0A0B0D)
+@Preview(showBackground = true, backgroundColor = 0xFF000000)
 @Composable
 private fun NextVideosHeaderPreview() = YouTubeGOTheme(darkTheme = true) { NextVideosHeader(autoplay = true, onAutoplayChange = {}) }
 
-@Preview(showBackground = true, backgroundColor = 0xFF0A0B0D, heightDp = 600)
+@Preview(showBackground = true, backgroundColor = 0xFF000000, heightDp = 600)
 @Composable
 private fun PlayerInfoShimmerPreview() = YouTubeGOTheme(darkTheme = true) { PlayerInfoShimmer() }

@@ -853,8 +853,8 @@ private fun BufferingSweep(modifier: Modifier = Modifier) {
 private fun Modifier.darkShimmer(strong: Boolean = false): Modifier {
     val transition = rememberInfiniteTransition(label = "sk")
     val x = transition.animateFloat(-500f, 1500f, infiniteRepeatable(tween(1200, easing = LinearEasing)), label = "x")
-    val base = if (strong) Color(0xFF23262C) else Color(0xFF121418)
-    val high = if (strong) Color(0xFF353A43) else Color(0xFF1F2329)
+    val base = if (strong) Color(0xFF1C1C21) else Color(0xFF0E0E11)
+    val high = if (strong) Color(0xFF2E2E35) else Color(0xFF1A1A1F)
     return drawBehind {
         val xv = x.value
         drawRect(Brush.linearGradient(listOf(base, high, base), start = Offset(xv, 0f), end = Offset(xv + 500f, 300f)))
