@@ -238,7 +238,7 @@ class NewPipeVideoRepository @Inject constructor(
                     url = it.content ?: "",
                 )
             },
-            recommendations = runCatching { extractor.relatedStreams.items.summaries() }.getOrDefault(emptyList()),
+            recommendations = runCatching { extractor.relatedStreams?.items?.summaries() }.getOrNull() ?: emptyList(),
         )
     }
 
