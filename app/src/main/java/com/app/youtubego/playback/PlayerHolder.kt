@@ -2,7 +2,6 @@ package com.app.youtubego.playback
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.AudioAttributes
@@ -14,7 +13,6 @@ import com.app.youtubego.data.local.UserLibraryStore
 import com.app.youtubego.domain.model.VideoSummary
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -114,14 +112,22 @@ class PlayerHolder @Inject constructor(
         handler.postDelayed(sleepRunnable, ms)
     }
 
-    private fun create(): ExoPlayer {
+    /**
+     * Sumber data HTTP dengan header per-klien YouTube. Dibagi ke pemutar lain (Shorts) agar URL stream tidak
+     * ditolak server karena User-Agent bawaan ExoPlayer tak cocok dengan klien pembuat URL.
+     */
+    val dataSourceFactory: androidx.media3.datasource.DataSource.Factory by lazy {
         // Catatan: User-Agent TIDAK diatur di pabrik ini (di Media3 nilai itu menimpa header per-permintaan);
-        // diatur per permintaan lewat ResolvingDataSource di bawah, mengikuti klien YouTube pembuat URL (param c=).
+        // diatur per permintaan lewat ResolvingDataSource, mengikuti klien YouTube pembuat URL (param c=).
         val http = DefaultHttpDataSource.Factory()
             .setConnectTimeoutMs(15_000)
             .setReadTimeoutMs(20_000)
             .setAllowCrossProtocolRedirects(true)
-        val dataSource = ResolvingDataSource.Factory(DefaultDataSource.Factory(context, http)) { spec -> withClientHeaders(spec) }
+        ResolvingDataSource.Factory(DefaultDataSource.Factory(context, http)) { spec -> ClientHeaders.apply(spec) }
+    }
+
+    private fun create(): ExoPlayer {
+        val dataSource = dataSourceFactory
         // Buffer lebih lapang dari bawaan untuk jaringan seluler yang naik-turun; mulai putar cepat (1,5 dtk),
         // setelah buffering ulang tunggu 4 dtk agar tidak "buffer-putar-buffer" berulang.
         val loadControl = DefaultLoadControl.Builder()
@@ -150,40 +156,6 @@ class PlayerHolder @Inject constructor(
                     override fun onPlaybackStateChanged(playbackState: Int) { if (playbackState == Player.STATE_ENDED) persistProgress() }
                 })
             }
-    }
-
-    /**
-     * URL googlevideo terikat ke klien YouTube yang membuatnya (c=ANDROID / IOS / WEB ...). Server menolak (403/5xx)
-     * bila User-Agent tidak cocok dengan klien itu, jadi setiap permintaan memakai UA yang sesuai.
-     */
-    private fun withClientHeaders(spec: DataSpec): DataSpec {
-        val uri = spec.uri
-        val host = uri.host.orEmpty()
-        val client = uri.getQueryParameter("c")
-        val ua = when (client) {
-            "ANDROID" -> ytUserAgent("getAndroidUserAgent") ?: UA
-            "IOS" -> ytUserAgent("getIosUserAgent") ?: UA
-            else -> UA
-        }
-        val headers = HashMap(spec.httpRequestHeaders)
-        headers["User-Agent"] = ua
-        if (host.endsWith("googlevideo.com") && (client == null || client.startsWith("WEB") || client.startsWith("MWEB"))) {
-            headers["Origin"] = "https://www.youtube.com"
-            headers["Referer"] = "https://www.youtube.com/"
-        }
-        return spec.buildUpon().setHttpRequestHeaders(headers).build()
-    }
-
-    private val uaCache = HashMap<String, String?>()
-    /** UA resmi klien dari NewPipeExtractor (lewat refleksi supaya build tak patah bila nama berubah antar-versi). */
-    private fun ytUserAgent(method: String): String? = synchronized(uaCache) {
-        uaCache.getOrPut(method) {
-            runCatching {
-                val c = Class.forName("org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper")
-                val loc = Class.forName("org.schabi.newpipe.extractor.localization.Localization")
-                c.getMethod(method, loc).invoke(null, null) as? String
-            }.getOrNull()?.takeIf { it.isNotBlank() }
-        }
     }
 
     private fun defaultSelection(p: Player, videoEnabled: Boolean): TrackSelectionParameters =
@@ -242,9 +214,5 @@ class PlayerHolder @Inject constructor(
         // startService (bukan startForegroundService): dipanggil dari layar yang sedang tampil, dan Media3
         // sendiri menaikkan service ke foreground begitu pemutaran benar-benar berjalan.
         runCatching { context.startService(Intent(context, PlaybackService::class.java)) }
-    }
-
-    private companion object {
-        const val UA = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
     }
 }

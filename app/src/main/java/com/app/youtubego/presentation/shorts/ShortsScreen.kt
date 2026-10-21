@@ -42,6 +42,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
@@ -51,6 +52,7 @@ import com.app.youtubego.domain.model.TopicCatalog
 import com.app.youtubego.domain.model.VideoSummary
 import com.app.youtubego.domain.repository.VideoRepository
 import com.app.youtubego.domain.usecase.toFriendlyMessage
+import com.app.youtubego.playback.PlayerHolder
 import com.app.youtubego.presentation.common.EmptyState
 import com.app.youtubego.presentation.common.formatViewsId
 import com.app.youtubego.presentation.theme.YgAccent
@@ -81,7 +83,10 @@ class ShortsViewModel @Inject constructor(
     private val repo: VideoRepository,
     private val deviceSource: DeviceStreamSource,
     private val library: UserLibraryStore,
+    holder: PlayerHolder,
 ) : ViewModel() {
+    /** Sumber data dengan header per-klien YouTube (sama dengan pemutar utama): tanpa ini stream ANDROID/IOS/VISIONOS ditolak 403. */
+    val dataSourceFactory = holder.dataSourceFactory
     private val _state = MutableStateFlow(ShortsUiState())
     val state: StateFlow<ShortsUiState> = _state.asStateFlow()
     val liked: StateFlow<Set<String>> = library.liked
@@ -260,6 +265,7 @@ private fun ShortPlayer(video: VideoSummary, vm: ShortsViewModel) {
     var progress by remember(u) { mutableFloatStateOf(0f) }
     val exo = remember(u) {
         ExoPlayer.Builder(context)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(vm.dataSourceFactory))
             // Fokus audio: Short mulai -> pemutar video utama/notifikasi dijeda otomatis (tak tumpang tindih).
             .setAudioAttributes(androidx.media3.common.AudioAttributes.Builder().setUsage(androidx.media3.common.C.USAGE_MEDIA).setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
             .setHandleAudioBecomingNoisy(true)

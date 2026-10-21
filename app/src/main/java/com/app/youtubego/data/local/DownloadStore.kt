@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import com.app.youtubego.data.newpipe.DeviceStreamSource
 import com.app.youtubego.domain.model.VideoSummary
 import com.app.youtubego.domain.repository.VideoRepository
+import com.app.youtubego.playback.ClientHeaders
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -83,7 +84,9 @@ class DownloadStore @Inject constructor(
         if (jobs[video.id]?.isActive == true) return
         library.remember(video)
         upsert(DownloadItem(video, DownloadStatus.DOWNLOADING, existing?.bytes ?: 0, existing?.total ?: 0))
-        jobs[video.id] = scope.launch { download(video) }
+        // Ulangi setelah gagal/dijeda: URL lama bisa kedaluwarsa atau ditolak, jadi lewati cache ekstraksi.
+        val fresh = existing != null && existing.status != DownloadStatus.DONE
+        jobs[video.id] = scope.launch { download(video, fresh) }
     }
 
     @Synchronized
@@ -109,18 +112,26 @@ class DownloadStore @Inject constructor(
         persist()
     }
 
-    private suspend fun download(video: VideoSummary) {
+    private suspend fun download(video: VideoSummary, fresh: Boolean) {
         try {
             if (library.wifiOnlyDownloads.value && isMetered()) {
                 fail(video.id, "Menunggu Wi-Fi. Matikan \"Unduh hanya lewat Wi-Fi\" di Pengaturan untuk memakai data seluler.")
                 return
             }
-            val url = resolveUrl(video.id) ?: run { fail(video.id, "Tautan unduhan tidak ditemukan. Coba lagi nanti."); return }
+            val url = resolveUrl(video.id, fresh) ?: run { fail(video.id, "Tautan unduhan tidak ditemukan. Coba lagi nanti."); return }
             val file = fileFor(video.id)
             var offset = if (file.exists()) file.length() else 0L
-            val req = Request.Builder().url(url).header("User-Agent", UA)
+            // Header harus cocok dengan klien YouTube pembuat URL (param c=), kalau tidak server menjawab 403.
+            val req = Request.Builder().url(url)
+                .apply { ClientHeaders.forUrl(url).forEach { (k, v) -> header(k, v) } }
                 .apply { if (offset > 0) header("Range", "bytes=$offset-") }.build()
             client.newCall(req).execute().use { resp ->
+                // 416 saat melanjutkan = berkas sudah lengkap (proses mati tepat sebelum status DONE tersimpan).
+                if (resp.code == 416 && offset > 0) {
+                    update(video.id) { it.copy(status = DownloadStatus.DONE, bytes = offset, total = offset, error = "") }
+                    persist()
+                    return
+                }
                 if (!resp.isSuccessful) { fail(video.id, "Server menolak unduhan (galat ${resp.code})."); return }
                 val body = resp.body ?: run { fail(video.id, "Respons kosong dari server."); return }
                 val resumed = resp.code == 206
@@ -154,8 +165,8 @@ class DownloadStore @Inject constructor(
     }
 
     /** Jalur perangkat dulu (IP pengguna), lalu API server; ambil stream gabungan terendah yang layak (>= 240p bila ada). */
-    private suspend fun resolveUrl(id: String): String? {
-        val dev = withTimeoutOrNull(12_000) { deviceSource.resolve(id).getOrNull()?.combined }.orEmpty()
+    private suspend fun resolveUrl(id: String, fresh: Boolean): String? {
+        val dev = withTimeoutOrNull(12_000) { deviceSource.resolve(id, force = fresh).getOrNull()?.combined }.orEmpty()
         pick(dev.map { it.url to it.qualityLabel })?.let { return it }
         val api = repo.videoDetail(id).getOrNull()?.combinedStreams.orEmpty()
         return pick(api.map { it.url to it.qualityLabel })
@@ -208,9 +219,5 @@ class DownloadStore @Inject constructor(
                 if (status == DownloadStatus.FAILED) "Berkas unduhan tidak ditemukan." else "",
             )
         }
-    }
-
-    private companion object {
-        const val UA = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
     }
 }

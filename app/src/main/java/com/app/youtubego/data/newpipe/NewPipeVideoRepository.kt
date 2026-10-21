@@ -94,7 +94,8 @@ class NewPipeVideoRepository @Inject constructor(
     )
 
     private fun List<InfoItem>.summaries(): List<VideoSummary> =
-        filterIsInstance<StreamInfoItem>().map { it.toSummary() }.filter { it.id.isNotBlank() }
+        // distinctBy: daftar Lazy memakai id sebagai key; id ganda (YouTube kadang mengulang video) membuat aplikasi crash.
+        filterIsInstance<StreamInfoItem>().map { it.toSummary() }.filter { it.id.isNotBlank() }.distinctBy { it.id }
 
     private fun List<InfoItem>.channelResults(): List<ChannelResult> =
         filterIsInstance<ChannelInfoItem>().map {
@@ -310,7 +311,9 @@ class NewPipeVideoRepository @Inject constructor(
 
     private fun channelLatestItems(key: String): List<VideoSummary> {
         ensureInit()
-        val tab = ServiceList.YouTube.getChannelTabExtractorFromId(channelUrl(key), "videos")
+        // Parameter pertama adalah ID channel ("UC..." atau "@handle"), BUKAN URL: extractor membangun
+        // "https://www.youtube.com/<id>/videos" sendiri. Memberi URL penuh membuat tautan ganda yang tak bisa di-resolve.
+        val tab = ServiceList.YouTube.getChannelTabExtractorFromId(key, "videos")
         tab.fetchPage()
         return tab.initialPage.items.summaries()
     }
