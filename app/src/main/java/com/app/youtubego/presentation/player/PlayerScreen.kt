@@ -553,6 +553,7 @@ fun PlayerScreen(
             qualityLabel, qualityChoices, speedLabel, speedChoices, captionLabel, captionChoices,
             loopOn = loopOn, onLoopChange = { loopOn = it; player.repeatMode = if (it) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF },
             zoomFill = zoomFill, onZoomChange = { zoomFill = it },
+            backgroundPlay = backgroundPlay, onBackgroundPlayChange = vm::setBackgroundPlay,
             sleepLabel = sleepLabel, sleepChoices = sleepChoices,
             captionSizeLabel = CAPTION_SIZE_NAMES[captionSize.coerceIn(0, 3)], captionSizeChoices = CAPTION_SIZE_NAMES.mapIndexed { i, n -> Choice(n, captionSize == i) { vm.setCaptionSize(i) } },
             captionStyleLabel = CAPTION_STYLE_NAMES[captionStyle.coerceIn(0, 3)], captionStyleChoices = CAPTION_STYLE_NAMES.mapIndexed { i, n -> Choice(n, captionStyle == i) { vm.setCaptionStyle(i) } },

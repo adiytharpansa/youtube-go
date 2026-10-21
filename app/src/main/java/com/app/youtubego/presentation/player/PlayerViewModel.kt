@@ -55,6 +55,7 @@ class PlayerViewModel @Inject constructor(
     val autoplay: StateFlow<Boolean> = library.autoplay
     val highQuality: StateFlow<Boolean> = library.highQuality
     val backgroundPlay: StateFlow<Boolean> = library.backgroundPlay
+    fun setBackgroundPlay(on: Boolean) = library.setBackgroundPlay(on)
     val playlists: StateFlow<List<Playlist>> = library.playlists
     val captionSize: StateFlow<Int> = library.captionSize
     val captionStyle: StateFlow<Int> = library.captionStyle

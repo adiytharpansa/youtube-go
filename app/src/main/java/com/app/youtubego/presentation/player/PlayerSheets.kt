@@ -59,6 +59,7 @@ internal fun PlayerSettingsSheet(
     captionLabel: String, captionChoices: List<Choice>,
     loopOn: Boolean, onLoopChange: (Boolean) -> Unit,
     zoomFill: Boolean, onZoomChange: (Boolean) -> Unit,
+    backgroundPlay: Boolean, onBackgroundPlayChange: (Boolean) -> Unit,
     sleepLabel: String, sleepChoices: List<Choice>,
     captionSizeLabel: String = "", captionSizeChoices: List<Choice> = emptyList(),
     captionStyleLabel: String = "", captionStyleChoices: List<Choice> = emptyList(),
@@ -78,6 +79,7 @@ internal fun PlayerSettingsSheet(
                 SettingRow(Icons.Default.Bedtime, "Timer tidur", sleepLabel) { page = SettingsPage.SLEEP }
                 SettingSwitchRow(Icons.Default.Repeat, "Ulangi video", loopOn, onLoopChange)
                 SettingSwitchRow(Icons.Default.AspectRatio, "Isi layar (potong tepi)", zoomFill, onZoomChange)
+                SettingSwitchRow(Icons.Default.Headphones, "Putar di latar belakang", backgroundPlay, onBackgroundPlayChange)
             }
             else -> {
                 val (title, choices) = when (page) {

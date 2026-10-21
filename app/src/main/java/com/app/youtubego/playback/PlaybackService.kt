@@ -45,7 +45,11 @@ class PlaybackService : MediaSessionService() {
                 .setChannelName(R.string.playback_channel_name)
                 .build().apply { setSmallIcon(R.drawable.ic_stat_play) },
         )
-        session = MediaSession.Builder(this, SkipPlayer(player)).setSessionActivity(open).build()
+        val created = MediaSession.Builder(this, SkipPlayer(player)).setSessionActivity(open).build()
+        session = created
+        // WAJIB: tanpa MediaController yang terhubung, Media3 tidak mendaftarkan sesi ke service, sehingga
+        // notifikasi media tidak pernah tampil. addSession membuat service mengelola notifikasi sendiri.
+        addSession(created)
         player.addListener(idleWatcher)
     }
 
