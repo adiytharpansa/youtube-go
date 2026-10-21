@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -16,6 +17,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -61,7 +63,7 @@ internal fun rememberPlayerSnapshot(player: Player): PlayerSnapshot {
     return snap
 }
 
-private data class SeekFlash(val dir: Int, val stamp: Long)
+private data class SeekFlash(val dir: Int, val stamp: Long, val total: Int)
 
 /**
  * Overlay kontrol ala YouTube:
@@ -84,6 +86,7 @@ internal fun YtPlayerOverlay(
     onToggleFullscreen: () -> Unit,
     onBack: () -> Unit,
     onEnterPip: () -> Unit,
+    onNext: (() -> Unit)? = null,
 ) {
     var visible by remember { mutableStateOf(true) }
     var interaction by remember { mutableIntStateOf(0) }
@@ -95,6 +98,17 @@ internal fun YtPlayerOverlay(
     var flash by remember { mutableStateOf<SeekFlash?>(null) }
     var boosted by remember { mutableStateOf(false) }
     val ended = snap.state == Player.STATE_ENDED
+    val currentFlash by rememberUpdatedState(flash)
+    val fullscreenNow by rememberUpdatedState(isFullscreen)
+    /** Lompat 10 dtk per ketukan; ketukan beruntun ke arah sama menumpuk (10 -> 20 -> 30 dtk) seperti YouTube. */
+    fun doSeek(dir: Int) {
+        val dur = if (player.duration == C.TIME_UNSET) Long.MAX_VALUE else player.duration
+        player.seekTo((player.currentPosition + dir * 10_000L).coerceIn(0L, dur))
+        val prev = currentFlash
+        val total = if (prev != null && prev.dir == dir) prev.total + 10 else 10
+        flash = SeekFlash(dir, System.nanoTime(), total)
+        interaction++
+    }
     val buffering = snap.state == Player.STATE_BUFFERING
 
     LaunchedEffect(player) {
@@ -119,13 +133,18 @@ internal fun YtPlayerOverlay(
         Box(
             Modifier.fillMaxSize().pointerInput(player) {
                 detectTapGestures(
-                    onTap = { visible = !visible; interaction++ },
+                    onTap = { off ->
+                        val third = size.width / 3f
+                        val side = when { off.x < third -> -1; off.x > 2 * third -> 1; else -> 0 }
+                        val f = currentFlash
+                        // Sedang beruntun melompat: ketukan tunggal berikutnya di sisi yang sama melanjutkan lompatan.
+                        if (f != null && side != 0 && side == f.dir) doSeek(side) else { visible = !visible; interaction++ }
+                    },
                     onDoubleTap = { off ->
                         val third = size.width / 3f
-                        val dur = if (player.duration == C.TIME_UNSET) Long.MAX_VALUE else player.duration
                         when {
-                            off.x < third -> { player.seekTo((player.currentPosition - 10_000).coerceAtLeast(0)); flash = SeekFlash(-1, System.nanoTime()) }
-                            off.x > 2 * third -> { player.seekTo((player.currentPosition + 10_000).coerceAtMost(dur)); flash = SeekFlash(1, System.nanoTime()) }
+                            off.x < third -> doSeek(-1)
+                            off.x > 2 * third -> doSeek(1)
                             else -> if (player.isPlaying) player.pause() else player.play()
                         }
                     },
@@ -143,6 +162,17 @@ internal fun YtPlayerOverlay(
                         if (did) { boosted = false; player.setPlaybackSpeed(before) }
                     },
                 )
+            }.pointerInput(player) {
+                // Geser naik = layar penuh, geser turun = keluar layar penuh (seperti YouTube).
+                var acc = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { acc = 0f },
+                    onVerticalDrag = { change, d -> change.consume(); acc += d },
+                    onDragEnd = {
+                        if (acc < -90f && !fullscreenNow) onToggleFullscreen()
+                        else if (acc > 90f && fullscreenNow) onToggleFullscreen()
+                    },
+                )
             },
         )
 
@@ -154,7 +184,7 @@ internal fun YtPlayerOverlay(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(if (f.dir < 0) Icons.Default.FastRewind else Icons.Default.FastForward, null, tint = Color.White)
-                Text(" 10 detik", color = Color.White, style = MaterialTheme.typography.labelLarge)
+                Text(" ${f.total} detik", color = Color.White, style = MaterialTheme.typography.labelLarge)
             }
         }
         if (boosted) {
@@ -192,19 +222,35 @@ internal fun YtPlayerOverlay(
                     if (canPip) IconButton(onClick = onEnterPip) { Icon(Icons.Default.PictureInPictureAlt, "Picture-in-picture", tint = Color.White) }
                     IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, "Pengaturan", tint = Color.White) }
                 }
-                // Tombol tengah
-                if (!buffering) {
-                    IconButton(
-                        onClick = {
-                            interaction++
-                            if (ended) { player.seekTo(0); player.play() } else if (player.isPlaying) player.pause() else player.play()
-                        },
-                        modifier = Modifier.align(Alignment.Center).size(64.dp).background(Color.Black.copy(0.45f), CircleShape),
-                    ) {
-                        Icon(
-                            when { ended -> Icons.Default.Replay; snap.isPlaying -> Icons.Default.Pause; else -> Icons.Default.PlayArrow },
-                            if (ended) "Putar ulang" else "Putar/jeda", tint = Color.White, modifier = Modifier.size(36.dp),
-                        )
+                // Tombol tengah: sebelumnya (ulang dari awal) - putar/jeda - berikutnya
+                if (scrubbing) {
+                    Text(
+                        formatDuration((scrubFrac * duration).toLong() / 1000), color = Color.White,
+                        style = MaterialTheme.typography.headlineSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        modifier = Modifier.align(Alignment.Center).clip(CircleShape).background(Color.Black.copy(0.55f)).padding(horizontal = 16.dp, vertical = 6.dp),
+                    )
+                } else if (!buffering) {
+                    Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                        IconButton(
+                            onClick = { interaction++; player.seekTo(0) }, enabled = position > 3_000L,
+                            modifier = Modifier.size(48.dp).alpha(if (position > 3_000L) 1f else 0.4f).background(Color.Black.copy(0.35f), CircleShape),
+                        ) { Icon(Icons.Default.SkipPrevious, "Dari awal", tint = Color.White, modifier = Modifier.size(28.dp)) }
+                        IconButton(
+                            onClick = {
+                                interaction++
+                                if (ended) { player.seekTo(0); player.play() } else if (player.isPlaying) player.pause() else player.play()
+                            },
+                            modifier = Modifier.size(64.dp).background(Color.Black.copy(0.45f), CircleShape),
+                        ) {
+                            Icon(
+                                when { ended -> Icons.Default.Replay; snap.isPlaying -> Icons.Default.Pause; else -> Icons.Default.PlayArrow },
+                                if (ended) "Putar ulang" else "Putar/jeda", tint = Color.White, modifier = Modifier.size(36.dp),
+                            )
+                        }
+                        IconButton(
+                            onClick = { onNext?.invoke() }, enabled = onNext != null,
+                            modifier = Modifier.size(48.dp).alpha(if (onNext != null) 1f else 0.4f).background(Color.Black.copy(0.35f), CircleShape),
+                        ) { Icon(Icons.Default.SkipNext, "Video berikutnya", tint = Color.White, modifier = Modifier.size(28.dp)) }
                     }
                 }
                 // Bar bawah

@@ -30,6 +30,11 @@ import com.app.youtubego.presentation.theme.YgMuted
 import com.app.youtubego.presentation.theme.YgSurface
 import com.app.youtubego.presentation.theme.YgSurfaceVariant
 
+/** Bersihkan sisa HTML dari API (mis. &nbsp;, <br>, <a>) agar komentar/deskripsi tampil sebagai teks biasa. */
+internal fun cleanHtml(s: String): String =
+    if (s.indexOf('<') < 0 && s.indexOf('&') < 0) s
+    else androidx.core.text.HtmlCompat.fromHtml(s, androidx.core.text.HtmlCompat.FROM_HTML_MODE_COMPACT).toString().trim()
+
 internal data class Choice(val label: String, val selected: Boolean, val onPick: () -> Unit)
 private enum class SettingsPage { ROOT, QUALITY, SPEED, CAPTIONS }
 
@@ -40,6 +45,8 @@ internal fun PlayerSettingsSheet(
     qualityLabel: String, qualityChoices: List<Choice>,
     speedLabel: String, speedChoices: List<Choice>,
     captionLabel: String, captionChoices: List<Choice>,
+    loopOn: Boolean, onLoopChange: (Boolean) -> Unit,
+    zoomFill: Boolean, onZoomChange: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var page by remember { mutableStateOf(SettingsPage.ROOT) }
@@ -49,6 +56,8 @@ internal fun PlayerSettingsSheet(
                 if (qualityChoices.isNotEmpty()) SettingRow(Icons.Default.Tune, "Kualitas", qualityLabel) { page = SettingsPage.QUALITY }
                 SettingRow(Icons.Default.Speed, "Kecepatan pemutaran", speedLabel) { page = SettingsPage.SPEED }
                 if (captionChoices.isNotEmpty()) SettingRow(Icons.Default.ClosedCaption, "Teks (CC)", captionLabel) { page = SettingsPage.CAPTIONS }
+                SettingSwitchRow(Icons.Default.Repeat, "Ulangi video", loopOn, onLoopChange)
+                SettingSwitchRow(Icons.Default.AspectRatio, "Isi layar (potong tepi)", zoomFill, onZoomChange)
             }
             else -> {
                 val (title, choices) = when (page) {
@@ -79,6 +88,17 @@ internal fun PlayerSettingsSheet(
 }
 
 @Composable
+private fun SettingSwitchRow(icon: ImageVector, label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    ListItem(
+        headlineContent = { Text(label) },
+        leadingContent = { Icon(icon, null) },
+        trailingContent = { Switch(checked = checked, onCheckedChange = onChange, colors = SwitchDefaults.colors(checkedTrackColor = YtRed)) },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = Modifier.clickable { onChange(!checked) },
+    )
+}
+
+@Composable
 private fun SettingRow(icon: ImageVector, label: String, value: String, onClick: () -> Unit) {
     ListItem(
         headlineContent = { Text(label) },
@@ -89,7 +109,7 @@ private fun SettingRow(icon: ImageVector, label: String, value: String, onClick:
     )
 }
 
-/** Panel komentar (bottom sheet) dari API komentar Invidious. */
+/** Panel komentar (bottom sheet) dari ekstraktor NewPipe. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CommentsSheet(comments: UiState<List<CommentItem>>, onDismiss: () -> Unit) {
@@ -106,7 +126,7 @@ internal fun CommentsSheet(comments: UiState<List<CommentItem>>, onDismiss: () -
                         AsyncImage(c.avatarUrl, null, contentScale = ContentScale.Crop, modifier = Modifier.size(34.dp).clip(CircleShape).background(YgSurfaceVariant))
                         Column(Modifier.padding(start = 12.dp)) {
                             Text(listOf(c.author, formatRelativeTime(c.published)).filter { it.isNotBlank() }.joinToString(" • "), color = YgMuted, style = MaterialTheme.typography.labelMedium)
-                            Text(c.content, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 2.dp))
+                            Text(cleanHtml(c.content), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 2.dp))
                             if (c.likeCount > 0) Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.ThumbUp, null, tint = YgMuted, modifier = Modifier.size(14.dp))
                                 Text(" ${formatViewsId(c.likeCount)}", color = YgMuted, style = MaterialTheme.typography.labelMedium)
@@ -131,7 +151,7 @@ internal fun DescriptionSheet(d: VideoDetail, onDismiss: () -> Unit) {
                 Stat(formatViewsId(d.summary.viewCount), "tontonan")
                 formatRelativeTime(d.summary.published).takeIf { it.isNotEmpty() }?.let { Stat(it, "diunggah") }
             }
-            Text(d.description.ifBlank { "Tidak ada deskripsi." }, style = MaterialTheme.typography.bodyMedium)
+            Text(remember(d.description) { cleanHtml(d.description) }.ifBlank { "Tidak ada deskripsi." }, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }

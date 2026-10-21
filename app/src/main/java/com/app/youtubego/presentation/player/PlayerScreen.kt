@@ -56,6 +56,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.HttpDataSource
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.app.youtubego.domain.model.CaptionTrack
@@ -113,6 +114,8 @@ fun PlayerScreen(
     var selectedHeight by remember(videoId) { mutableStateOf<Int?>(null) }
     var selectedStreamUrl by remember(videoId) { mutableStateOf<String?>(null) }
     var captionIndex by remember(videoId) { mutableIntStateOf(-1) }
+    var loopOn by remember(videoId) { mutableStateOf(false) }
+    var zoomFill by rememberSaveable { mutableStateOf(false) }
 
     // Pemutar BERSAMA (singleton, dipegang PlaybackService): tidak dibuat/dibuang per layar, jadi pindah video
     // tidak memutus koneksi & decoder, dan suara bisa lanjut di latar belakang.
@@ -336,6 +339,7 @@ fun PlayerScreen(
                     }
                 },
                 // Pemutar kini berumur panjang: lepaskan PlayerView agar Activity tidak bocor lewat listener-nya.
+                update = { it.resizeMode = if (zoomFill) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT },
                 onRelease = { it.player = null },
                 modifier = Modifier.fillMaxSize(),
             )
@@ -348,6 +352,7 @@ fun PlayerScreen(
                     onToggleFullscreen = { isFullscreen = !isFullscreen },
                     onBack = { if (isFullscreen) isFullscreen = false else onBack() },
                     onEnterPip = { enterPip(activity) },
+                    onNext = nextVideo?.let { n -> { onVideoClick(n.id) } },
                 )
             }
             playerError?.let { msg ->
@@ -429,7 +434,11 @@ fun PlayerScreen(
         )
     }
     if (sheet == PlayerSheet.SETTINGS) {
-        PlayerSettingsSheet(qualityLabel, qualityChoices, speedLabel, speedChoices, captionLabel, captionChoices) { sheet = null }
+        PlayerSettingsSheet(
+            qualityLabel, qualityChoices, speedLabel, speedChoices, captionLabel, captionChoices,
+            loopOn = loopOn, onLoopChange = { loopOn = it; player.repeatMode = if (it) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF },
+            zoomFill = zoomFill, onZoomChange = { zoomFill = it },
+        ) { sheet = null }
     }
 }
 
@@ -511,7 +520,7 @@ private fun CommentsTeaser(comments: UiState<List<CommentItem>>, onOpen: () -> U
                 if (top == null) Text("Belum ada komentar.", color = YgMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
                 else Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     AsyncImage(top.avatarUrl, null, contentScale = ContentScale.Crop, modifier = Modifier.size(24.dp).clip(CircleShape).background(Color.DarkGray))
-                    Text(top.content, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 10.dp))
+                    Text(cleanHtml(top.content), maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 10.dp))
                 }
             }
         }

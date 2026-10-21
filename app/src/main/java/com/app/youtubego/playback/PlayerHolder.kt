@@ -82,6 +82,7 @@ class PlayerHolder @Inject constructor(@ApplicationContext private val context: 
         if (!keepSettings) {
             p.trackSelectionParameters = defaultSelection(p, videoEnabled)
             p.setPlaybackSpeed(1f)
+            p.repeatMode = Player.REPEAT_MODE_OFF
         }
         p.setMediaItem(item, startPositionMs ?: positions.remove(item.mediaId) ?: 0L)
         p.prepare()
