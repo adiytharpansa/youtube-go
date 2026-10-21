@@ -119,6 +119,7 @@ internal fun YtPlayerOverlay(
     var position by remember { mutableLongStateOf(0L) }
     var buffered by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
+    var live by remember { mutableStateOf(false) }
     var scrubbing by remember { mutableStateOf(false) }
     var scrubFrac by remember { mutableFloatStateOf(0f) }
     var flash by remember { mutableStateOf<SeekFlash?>(null) }
@@ -164,7 +165,9 @@ internal fun YtPlayerOverlay(
             position = player.currentPosition.coerceAtLeast(0)
             buffered = player.bufferedPosition.coerceAtLeast(0)
             duration = if (player.duration == C.TIME_UNSET) 0L else player.duration.coerceAtLeast(0)
-            delay(300)
+            live = player.isCurrentMediaItemLive
+            // Seekbar halus saat kontrol tampil & memutar (10x/dtk); hemat CPU saat tersembunyi/dijeda.
+            delay(if (visible && snap.isPlaying) 100L else 400L)
         }
     }
     LaunchedEffect(visible, interaction, snap.isPlaying, scrubbing) {
@@ -304,7 +307,12 @@ internal fun YtPlayerOverlay(
                 ),
             ) {
                 // Bar atas
-                Row(Modifier.align(Alignment.TopStart).fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.align(Alignment.TopStart).fillMaxWidth()
+                        .then(if (isFullscreen) Modifier.windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal)) else Modifier)
+                        .padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     IconButton(onClick = onBack) {
                         Icon(if (isFullscreen) Icons.AutoMirrored.Filled.ArrowBack else Icons.Default.KeyboardArrowDown, "Kembali", tint = Color.White)
                     }
@@ -357,13 +365,17 @@ internal fun YtPlayerOverlay(
                     }
                 }
                 // Bar bawah
-                Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 14.dp, end = 4.dp)) {
+                Column(
+                    Modifier.align(Alignment.BottomStart).fillMaxWidth()
+                        .then(if (isFullscreen) Modifier.windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal)).padding(bottom = 10.dp) else Modifier)
+                        .padding(start = 14.dp, end = 4.dp),
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         val shown = if (scrubbing) (scrubFrac * duration).toLong() else position
                         val chapterTitle = chapters.lastOrNull { it.startMs <= shown }?.title.orEmpty()
                         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                "${formatDuration(shown / 1000)} / ${formatDuration(duration / 1000)}",
+                                if (live) "\u25CF LANGSUNG" else "${formatDuration(shown / 1000)} / ${formatDuration(duration / 1000)}",
                                 color = Color.White, style = MaterialTheme.typography.labelMedium, maxLines = 1,
                             )
                             if (chapterTitle.isNotBlank()) Text(
@@ -421,7 +433,7 @@ private fun YtSeekBar(
     var lastFrac by remember { mutableFloatStateOf(0f) }
     val thumb by animateDpAsState(if (active) 16.dp else 12.dp, label = "thumb")
     Box(
-        modifier.fillMaxWidth().height(28.dp).onSizeChanged { widthPx = it.width.toFloat().coerceAtLeast(1f) }
+        modifier.fillMaxWidth().height(40.dp).onSizeChanged { widthPx = it.width.toFloat().coerceAtLeast(1f) }
             .pointerInput(enabled) {
                 if (!enabled) return@pointerInput
                 detectTapGestures(onTap = { o -> onScrubEnd((o.x / size.width).coerceIn(0f, 1f)) })

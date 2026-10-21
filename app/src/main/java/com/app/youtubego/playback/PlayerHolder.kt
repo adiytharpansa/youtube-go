@@ -2,6 +2,7 @@ package com.app.youtubego.playback
 
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
 import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.AudioAttributes
@@ -18,6 +19,8 @@ import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.MergingMediaSource
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -158,10 +161,23 @@ class PlayerHolder @Inject constructor(
             }
     }
 
+    /** Batas resolusi untuk mode "Otomatis" pada sumber adaptif (DASH/HLS): 1080p bila "Kualitas tinggi" aktif, selain itu 720p. */
+    fun autoMaxSize(): Pair<Int, Int> = if (library.highQuality.value) 1920 to 1080 else 1280 to 720
+
+    /**
+     * Tinggi video (px) yang dipilih mode "Otomatis" untuk sumber video-saja + audio-saja (tanpa ABR):
+     * "Kualitas tinggi" = 1080p; selain itu 720p di Wi-Fi dan 480p di data seluler (jaringan berbayar).
+     */
+    fun autoHeight(): Int {
+        if (library.highQuality.value) return 1080
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        return if (cm?.isActiveNetworkMetered == true) 480 else 720
+    }
+
     private fun defaultSelection(p: Player, videoEnabled: Boolean): TrackSelectionParameters =
         p.trackSelectionParameters.buildUpon()
             .clearOverrides()
-            .setMaxVideoSize(1280, 720).setMaxAudioBitrate(128_000)
+            .setMaxVideoSize(autoMaxSize().first, autoMaxSize().second).setMaxAudioBitrate(128_000)
             .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, !videoEnabled)
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
             .setPreferredTextLanguage(null)
@@ -172,14 +188,23 @@ class PlayerHolder @Inject constructor(
      * pilihan kualitas & kecepatan pengguna dipertahankan. Video baru selalu mulai dari bawaan.
      * [videoEnabled] false bila aplikasi sedang di latar belakang (hanya audio, hemat data & baterai).
      */
-    fun play(item: MediaItem, startPositionMs: Long? = null, keepSettings: Boolean = false, videoEnabled: Boolean = true) {
+    fun play(item: MediaItem, startPositionMs: Long? = null, keepSettings: Boolean = false, videoEnabled: Boolean = true, audioUrl: String? = null) {
         val p = player
         if (!keepSettings) {
             p.trackSelectionParameters = defaultSelection(p, videoEnabled)
             p.setPlaybackSpeed(1f)
             p.repeatMode = Player.REPEAT_MODE_OFF
         }
-        p.setMediaItem(item, startPositionMs ?: positions.remove(item.mediaId) ?: library.progressOf(item.mediaId))
+        val start = startPositionMs ?: positions.remove(item.mediaId) ?: library.progressOf(item.mediaId)
+        if (audioUrl.isNullOrBlank()) p.setMediaItem(item, start)
+        else {
+            // Video-saja + audio-saja digabung (resolusi 480p-1080p, jauh di atas stream gabungan YouTube yang mentok 360p).
+            // DefaultMediaSourceFactory tetap memasang takarir dari [item]; MergingMediaSource memakai MediaItem sumber pertama,
+            // jadi mediaId & metadata notifikasi tetap milik video ini.
+            val video = DefaultMediaSourceFactory(dataSourceFactory).createMediaSource(item)
+            val audio = ProgressiveMediaSource.Factory(dataSourceFactory).createMediaSource(MediaItem.fromUri(audioUrl))
+            p.setMediaSource(MergingMediaSource(video, audio), start)
+        }
         p.prepare()
         p.playWhenReady = true
         startService()

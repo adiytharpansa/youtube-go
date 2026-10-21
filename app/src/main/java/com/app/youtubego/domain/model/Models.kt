@@ -12,7 +12,7 @@ data class Storyboard(
 )
 /** Bab video (penanda waktu di deskripsi). */
 data class Chapter(val title: String, val startMs: Long)
-data class StreamOption(val url: String, val qualityLabel: String, val mimeType: String)
+data class StreamOption(val url: String, val qualityLabel: String, val mimeType: String, val codec: String = "")
 data class CaptionTrack(val label: String, val languageCode: String, val url: String)
 data class VideoDetail(
     val summary: VideoSummary, val description: String, val likeCount: Long,

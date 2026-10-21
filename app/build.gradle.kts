@@ -13,8 +13,8 @@ android {
         applicationId = "com.app.youtubego"
         minSdk = 24
         targetSdk = 34
-        versionCode = 52
-        versionName = "1.52.0"
+        versionCode = 53
+        versionName = "1.53.0"
     }
     buildTypes {
         release { isMinifyEnabled = true; isShrinkResources = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") }

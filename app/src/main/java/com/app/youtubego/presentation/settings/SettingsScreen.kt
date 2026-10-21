@@ -140,7 +140,7 @@ fun SettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()) 
             }
 
             Group("Pemutaran") {
-                SwitchRow(Icons.Filled.HighQuality, "Kualitas tinggi sebagai bawaan", "Mati: mulai dari 360p untuk hemat data. Bisa diganti di menu pemutar.", highQuality, vm::setHighQuality)
+                SwitchRow(Icons.Filled.HighQuality, "Kualitas tinggi sebagai bawaan", "Mati: 720p di Wi-Fi, 480p di data seluler. Hidup: sampai 1080p. Bisa diganti di menu pemutar.", highQuality, vm::setHighQuality)
                 RowDivider()
                 SwitchRow(Icons.Filled.Headphones, "Putar di latar belakang", "Suara tetap jalan saat layar mati atau app dikecilkan, dengan kontrol di notifikasi.", backgroundPlay, vm::setBackgroundPlay)
                 RowDivider()

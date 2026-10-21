@@ -45,6 +45,12 @@ Rincian lengkap ada di [BLUEPRINT.md](BLUEPRINT.md).
 ## Build debug (di GitHub Actions, tanpa PC)
 Actions → **Build Debug APK** → Run workflow → unduh artefak `youtube-go-debug`.
 
+## Baru di v1.53 - pemutar setara YouTube + logo dirapikan
+- **Kualitas sampai 1080p**: sebelumnya pemutar utama hanya memutar stream gabungan 360p (YouTube tidak memberi manifes DASH untuk video biasa). Kini video-saja + audio-saja digabung (`MergingMediaSource`): Otomatis = 720p di Wi-Fi / 480p di data seluler (1080p bila "Kualitas tinggi" aktif). Menu Kualitas menampilkan 144p-1080p dan label "Otomatis (720p)" sesuai yang benar-benar diputar. H.264 didahulukan (paling kompatibel); bila gagal, otomatis turun ke stream gabungan.
+- **PiP**: rasio jendela mengikuti video, tombol putar/jeda di jendela, masuk PiP mulus lewat gestur Beranda (Android 12+).
+- **Layar penuh**: kontrol tidak lagi tertutup poni/cutout; area sentuh seekbar lebih besar (40dp) dan progres lebih halus; siaran langsung menampilkan "LANGSUNG".
+- **Logo**: ikon launcher/splash/Beranda/notifikasi dirapikan (simetris, di tengah, tidak terpotong).
+
 ## Baru di v1.52 - polesan "Anda" & Pengaturan
 - **Anda**: judul seragam dengan tab lain, Pengaturan jadi ikon di header; kartu "Terakhir ditonton" tidak pernah kosong lagi (ukuran gambar sesuai kartu, thumbnail cadangan, latar + ikon putar, garis progres menonton); garis pemisah berat diganti jarak.
 - **Pengaturan**: bulatan saklar putih (akar masalahnya `onPrimary` ungu bawaan M3, kini putih di kedua tema), pengelompokan dalam kartu dengan ikon, tindakan merusak berwarna merah + tombol konfirmasi merah, Snackbar (dengan "Urungkan" untuk riwayat) menggantikan Toast, teks lebih ringkas, tidak tertimpa pil gestur.

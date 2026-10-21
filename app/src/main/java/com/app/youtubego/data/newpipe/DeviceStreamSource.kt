@@ -71,7 +71,7 @@ class DeviceStreamSource @Inject constructor(
                 extractor.videoOnlyStreams
                     .filter { it.isUrl() && it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP }
                     .sortedBy { v -> v.resolution?.takeWhile { c -> c.isDigit() }?.toIntOrNull() ?: v.height }
-                    .map { StreamOption(it.url ?: it.content, it.resolution ?: "", it.format?.mimeType ?: "video/mp4") }
+                    .map { StreamOption(it.url ?: it.content, it.resolution ?: "", it.format?.mimeType ?: "video/mp4", it.codec.orEmpty()) }
             }.getOrDefault(emptyList())
             val audioOnly = runCatching {
                 extractor.audioStreams

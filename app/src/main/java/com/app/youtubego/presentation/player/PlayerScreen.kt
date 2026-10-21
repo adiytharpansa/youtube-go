@@ -1,8 +1,13 @@
 package com.app.youtubego.presentation.player
 
 import android.app.Activity
+import android.app.PendingIntent
 import android.app.PictureInPictureParams
+import android.app.RemoteAction
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
@@ -44,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.PictureInPictureModeChangedInfo
+import androidx.core.content.ContextCompat
 import androidx.core.util.Consumer
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -58,6 +64,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -67,6 +74,7 @@ import androidx.media3.ui.SubtitleView
 import coil.compose.AsyncImage
 import androidx.compose.ui.res.stringResource
 import com.app.youtubego.R
+import com.app.youtubego.data.newpipe.DevicePlayback
 import com.app.youtubego.domain.model.CaptionTrack
 import com.app.youtubego.domain.model.CommentItem
 import com.app.youtubego.domain.model.StreamOption
@@ -143,6 +151,8 @@ fun PlayerScreen(
     var adaptive by remember(videoId) { mutableStateOf(false) }
     var selectedHeight by remember(videoId) { mutableStateOf<Int?>(null) }
     var selectedStreamUrl by remember(videoId) { mutableStateOf<String?>(null) }
+    /** Tinggi video pilihan pengguna untuk sumber video-saja + audio-saja (null = Otomatis). */
+    var mergedPick by remember(videoId) { mutableStateOf<Int?>(null) }
     var captionIndex by remember(videoId) { mutableIntStateOf(-1) }
     var loopOn by remember(videoId) { mutableStateOf(false) }
     var zoomFill by rememberSaveable { mutableStateOf(false) }
@@ -188,13 +198,35 @@ fun PlayerScreen(
         }
     }
     // Picture-in-Picture: otomatis saat pengguna meninggalkan aplikasi sambil memutar.
+    // Jendela PiP: rasio mengikuti video, tombol putar/jeda di jendela, dan (Android 12+) masuk PiP mulus saat gestur Beranda.
     DisposableEffect(activity, player) {
         val a = activity as? ComponentActivity
-        val leave = Runnable { if (player.isPlaying) enterPip(a) }
+        // Android 12+ masuk PiP sendiri lewat setAutoEnterEnabled; di bawahnya lewat onUserLeaveHint.
+        val leave = Runnable { if (player.isPlaying && Build.VERSION.SDK_INT < 31) enterPip(a, player) }
         val pipChanged = Consumer<PictureInPictureModeChangedInfo> { inPip = it.isInPictureInPictureMode }
+        fun refreshPip() { if (a != null) updatePipParams(a, player) }
+        val pipListener = object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) = refreshPip()
+            override fun onVideoSizeChanged(videoSize: VideoSize) = refreshPip()
+        }
+        val toggleReceiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context?, i: Intent?) {
+                if (i?.action == PIP_TOGGLE_ACTION) { if (player.isPlaying) player.pause() else player.play() }
+            }
+        }
+        if (a != null) {
+            ContextCompat.registerReceiver(a, toggleReceiver, IntentFilter(PIP_TOGGLE_ACTION), ContextCompat.RECEIVER_NOT_EXPORTED)
+            refreshPip()
+        }
         a?.addOnUserLeaveHintListener(leave)
         a?.addOnPictureInPictureModeChangedListener(pipChanged)
-        onDispose { a?.removeOnUserLeaveHintListener(leave); a?.removeOnPictureInPictureModeChangedListener(pipChanged) }
+        player.addListener(pipListener)
+        onDispose {
+            player.removeListener(pipListener)
+            a?.removeOnUserLeaveHintListener(leave)
+            a?.removeOnPictureInPictureModeChangedListener(pipChanged)
+            if (a != null) { runCatching { a.unregisterReceiver(toggleReceiver) }; clearPipAutoEnter(a) }
+        }
     }
     var playerError by remember(videoId) { mutableStateOf<String?>(null) }
     var autoRetries by remember(videoId) { mutableIntStateOf(0) }
@@ -284,7 +316,7 @@ fun PlayerScreen(
     // Hanya memuat ulang bila URL BERUBAH, dan membawa posisi terakhir: tidak ada lagi "restart dari 0"
     // saat detail API datang belakangan atau pengaturan kualitas berubah.
     var loadedKey by remember(videoId) { mutableStateOf<String?>(null) }
-    LaunchedEffect(deviceSettled, device, highQuality, sourceSkip, state is UiState.Loading, detail?.combinedStreams?.firstOrNull()?.url, detail?.dashUrl, detail?.hlsUrl) {
+    LaunchedEffect(deviceSettled, device, highQuality, sourceSkip, mergedPick, state is UiState.Loading, detail?.combinedStreams?.firstOrNull()?.url, detail?.dashUrl, detail?.hlsUrl) {
         if (!deviceSettled) return@LaunchedEffect
         if (selectedStreamUrl != null) return@LaunchedEffect // pengguna memilih kualitas manual: jangan ditimpa
         val dev = device
@@ -301,18 +333,28 @@ fun PlayerScreen(
         val subs = d?.captions.orEmpty().filter { it.url.isNotBlank() }
         val summary = d?.summary ?: dev?.summary
         // Daftar sumber berurutan prioritas; sourceSkip memilih yang ke-n bila sumber sebelumnya gagal diputar.
+        // Sumber PALING ATAS: video-saja + audio-saja digabung (480p-1080p). YouTube hampir tak pernah memberi manifes DASH
+        // untuk video biasa dan stream gabungannya mentok 360p, jadi tanpa ini pemutar selalu 360p. Dipakai hanya bila
+        // resolusi yang dipilih lebih tinggi dari stream gabungan terbaik (atau pengguna memilih tinggi tertentu).
+        val mergedOpts = mergedVideoOptions(dev)
+        val mergedAudio = pickAudio(dev)
+        val muxedBestH = dev?.combined?.maxOfOrNull { heightOf(it) } ?: 0
+        val targetH = mergedPick ?: holder.autoHeight()
+        val mergedVideo = mergedOpts.filter { heightOf(it) <= targetH }.maxByOrNull { heightOf(it) } ?: mergedOpts.minByOrNull { heightOf(it) }
+        val useMerged = mergedVideo != null && mergedAudio != null && (mergedPick != null || heightOf(mergedVideo) > muxedBestH)
         val candidates = listOfNotNull(
-            devDash?.takeIf { it.isNotBlank() }?.let { Triple(it, MimeTypes.APPLICATION_MPD, true) },
-            devCombined?.takeIf { it.isNotBlank() }?.let { Triple<String, String?, Boolean>(it, null, false) },
-            devHls?.takeIf { it.isNotBlank() }?.let { Triple(it, MimeTypes.APPLICATION_M3U8, true) },
-            combined?.takeIf { it.isNotBlank() }?.let { Triple<String, String?, Boolean>(it, null, false) },
-            d?.dashUrl?.takeIf { it.isNotBlank() }?.let { Triple(it, MimeTypes.APPLICATION_MPD, true) },
-            d?.hlsUrl?.takeIf { it.isNotBlank() }?.let { Triple(it, MimeTypes.APPLICATION_M3U8, true) },
-        ).distinctBy { it.first }
+            mergedVideo?.takeIf { useMerged }?.let { PlaySource(it.url, null, false, mergedAudio) },
+            devDash?.takeIf { it.isNotBlank() }?.let { PlaySource(it, MimeTypes.APPLICATION_MPD, true) },
+            devCombined?.takeIf { it.isNotBlank() }?.let { PlaySource(it, null, false) },
+            devHls?.takeIf { it.isNotBlank() }?.let { PlaySource(it, MimeTypes.APPLICATION_M3U8, true) },
+            combined?.takeIf { it.isNotBlank() }?.let { PlaySource(it, null, false) },
+            d?.dashUrl?.takeIf { it.isNotBlank() }?.let { PlaySource(it, MimeTypes.APPLICATION_MPD, true) },
+            d?.hlsUrl?.takeIf { it.isNotBlank() }?.let { PlaySource(it, MimeTypes.APPLICATION_M3U8, true) },
+        ).distinctBy { it.uri }
         val pick = candidates.getOrNull(sourceSkip)
-        val uri: String? = pick?.first
-        val mime: String? = pick?.second
-        val isAdaptive: Boolean = pick?.third ?: false
+        val uri: String? = pick?.uri
+        val mime: String? = pick?.mime
+        val isAdaptive: Boolean = pick?.adaptive ?: false
         if (uri == null) {
             if (state !is UiState.Error) playerError = if (sourceSkip > 0)
                 "Semua sumber video sudah dicoba tapi gagal${lastHttp?.let { " (HTTP $it)" }.orEmpty()}. Coba lagi nanti atau pilih video lain."
@@ -332,6 +374,7 @@ fun PlayerScreen(
             startPositionMs = if (sameVideoReload) player.currentPosition.coerceAtLeast(0L) else null,
             keepSettings = sameVideoReload,
             videoEnabled = started,
+            audioUrl = pick?.audioUrl,
         )
         loadedKey = uri
     }
@@ -345,7 +388,7 @@ fun PlayerScreen(
     val streamOptions: List<StreamOption> = device?.combined.orEmpty().ifEmpty { detail?.combinedStreams.orEmpty() }
     fun applyHeight(h: Int?) {
         val b = player.trackSelectionParameters.buildUpon().clearOverridesOfType(C.TRACK_TYPE_VIDEO)
-        if (h == null) b.setMaxVideoSize(1280, 720)
+        if (h == null) holder.autoMaxSize().let { b.setMaxVideoSize(it.first, it.second) }
         else {
             b.setMaxVideoSize(Int.MAX_VALUE, Int.MAX_VALUE)
             outer@ for (g in player.currentTracks.groups) {
@@ -371,8 +414,18 @@ fun PlayerScreen(
         else b.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).setPreferredTextLanguage(captions[i].languageCode)
         player.trackSelectionParameters = b.build()
     }
+    val mergedOptions = remember(device) { mergedVideoOptions(device) }
+    val mergedAudioUrl = remember(device) { pickAudio(device) }
+    // Tinggi video yang BENAR-BENAR diputar (dari trek terpilih), untuk label "Otomatis (720p)" seperti YouTube.
+    val playingHeight = remember(snap.tracks) {
+        snap.tracks.groups.firstOrNull { it.type == C.TRACK_TYPE_VIDEO && it.isSelected }
+            ?.let { g -> (0 until g.length).firstOrNull { g.isTrackSelected(it) }?.let { g.getTrackFormat(it).height } } ?: 0
+    }
     val qualityChoices: List<Choice> = when {
-        adaptive && adaptiveHeights.size > 1 -> listOf(Choice("Otomatis (maks 720p)", selectedHeight == null) { applyHeight(null) }) +
+        !adaptive && mergedOptions.isNotEmpty() && mergedAudioUrl != null ->
+            listOf(Choice(if (mergedPick == null && playingHeight > 0) "Otomatis (${playingHeight}p)" else "Otomatis", mergedPick == null) { sourceSkip = 0; mergedPick = null }) +
+                mergedOptions.map { o -> Choice(o.qualityLabel.ifBlank { "${heightOf(o)}p" }, mergedPick == heightOf(o)) { sourceSkip = 0; mergedPick = heightOf(o) } }
+        adaptive && adaptiveHeights.size > 1 -> listOf(Choice("Otomatis (maks ${holder.autoMaxSize().second}p)", selectedHeight == null) { applyHeight(null) }) +
             adaptiveHeights.map { h -> Choice("${h}p", selectedHeight == h) { applyHeight(h) } }
         !adaptive && streamOptions.size > 1 -> streamOptions.map { o ->
             Choice(o.qualityLabel.ifBlank { "Standar" }, o.url == (selectedStreamUrl ?: streamOptions.first().url)) { applyStream(o) }
@@ -432,7 +485,7 @@ fun PlayerScreen(
                     onOpenSettings = { sheet = PlayerSheet.SETTINGS },
                     onToggleFullscreen = { isFullscreen = !isFullscreen },
                     onBack = { if (isFullscreen) isFullscreen = false else minimize() },
-                    onEnterPip = { enterPip(activity) },
+                    onEnterPip = { enterPip(activity, player) },
                     onNext = nextVideo?.let { n -> { onVideoClick(n.id) } },
                     onPrevious = prevVideo?.let { p -> { onVideoClick(p.id) } },
                     storyboard = device?.storyboard, chapters = device?.chapters.orEmpty(),
@@ -587,10 +640,68 @@ private fun buildItem(
     return b.build()
 }
 
-private fun enterPip(a: Activity?) {
+/** Sumber putar kandidat. [audioUrl] != null = video-saja + audio-saja yang digabung (uri = URL videonya). */
+private data class PlaySource(val uri: String, val mime: String?, val adaptive: Boolean, val audioUrl: String? = null)
+
+/** Tinggi piksel dari label seperti "1080p60" -> 1080. */
+private fun heightOf(o: StreamOption): Int = o.qualityLabel.takeWhile { it.isDigit() }.toIntOrNull() ?: 0
+
+/** Urutan kompatibilitas dekoder: H.264 paling aman, VP9 lalu lainnya, AV1 terakhir (banyak HP tak punya dekoder AV1). */
+private fun codecRank(o: StreamOption): Int = when {
+    o.codec.startsWith("avc") -> 0
+    o.codec.startsWith("vp9") || o.codec.startsWith("vp09") -> 1
+    o.codec.startsWith("av01") -> 3
+    else -> 2
+}
+
+/** Satu stream video-saja terbaik per tinggi (144p..1080p), terurut dari yang tertinggi. */
+private fun mergedVideoOptions(dev: DevicePlayback?): List<StreamOption> =
+    dev?.videoOnly.orEmpty()
+        .filter { it.url.isNotBlank() && heightOf(it) in 144..1080 && !it.qualityLabel.contains("HDR", ignoreCase = true) }
+        .groupBy { heightOf(it) }
+        .mapNotNull { (_, list) -> list.minByOrNull { codecRank(it) * 2 + if (it.mimeType.contains("mp4")) 0 else 1 } }
+        .sortedByDescending { heightOf(it) }
+
+/** Audio-saja terbaik (AAC/m4a bila ada, bitrate tertinggi). */
+private fun pickAudio(dev: DevicePlayback?): String? {
+    val a = dev?.audioOnly.orEmpty().filter { it.url.isNotBlank() }
+    return (a.lastOrNull { it.mimeType.contains("mp4") } ?: a.lastOrNull())?.url
+}
+
+private const val PIP_TOGGLE_ACTION = "com.app.youtubego.PIP_TOGGLE"
+
+/** Parameter PiP: rasio mengikuti video yang diputar (bukan selalu 16:9) + tombol putar/jeda di jendela mengambang. */
+private fun buildPipParams(a: Activity, player: Player): PictureInPictureParams? {
+    if (Build.VERSION.SDK_INT < 26) return null
+    val vs = player.videoSize
+    val ratio = if (vs.width > 0 && vs.height > 0) vs.width * vs.pixelWidthHeightRatio / vs.height else 16f / 9f
+    val playing = player.isPlaying
+    val label = if (playing) "Jeda" else "Putar"
+    val intent = PendingIntent.getBroadcast(
+        a, 0, Intent(PIP_TOGGLE_ACTION).setPackage(a.packageName), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+    val icon = android.graphics.drawable.Icon.createWithResource(a, if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
+    val b = PictureInPictureParams.Builder()
+        .setAspectRatio(Rational((ratio.coerceIn(0.5f, 2.3f) * 1000).toInt(), 1000))
+        .setActions(listOf(RemoteAction(icon, label, label, intent)))
+    if (Build.VERSION.SDK_INT >= 31) b.setAutoEnterEnabled(playing)
+    return b.build()
+}
+
+private fun updatePipParams(a: Activity, player: Player) {
+    if (Build.VERSION.SDK_INT < 26 || !a.packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return
+    runCatching { buildPipParams(a, player)?.let { a.setPictureInPictureParams(it) } }
+}
+
+/** Keluar dari layar pemutar: matikan masuk-PiP-otomatis agar layar lain tidak ikut mengecil jadi jendela PiP. */
+private fun clearPipAutoEnter(a: Activity) {
+    if (Build.VERSION.SDK_INT >= 31) runCatching { a.setPictureInPictureParams(PictureInPictureParams.Builder().setAutoEnterEnabled(false).build()) }
+}
+
+private fun enterPip(a: Activity?, player: Player) {
     if (a == null || !a.packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return
     runCatching {
-        if (Build.VERSION.SDK_INT >= 26) a.enterPictureInPictureMode(PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build())
+        if (Build.VERSION.SDK_INT >= 26) a.enterPictureInPictureMode(buildPipParams(a, player) ?: PictureInPictureParams.Builder().build())
         else @Suppress("DEPRECATION") a.enterPictureInPictureMode()
     }
 }
