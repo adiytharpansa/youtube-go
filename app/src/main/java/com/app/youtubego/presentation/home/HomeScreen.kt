@@ -82,6 +82,7 @@ fun HomeScreen(
                     YgChip(label = when (cat) { HomeCategory.FOR_YOU -> "Untuk Anda"; HomeCategory.ALL -> "Semua"; HomeCategory.MUSIC -> "Musik"; HomeCategory.GAMING -> "Game"; HomeCategory.MIX -> "Mix"; HomeCategory.NEWS -> "Berita"; HomeCategory.LEARN -> "Belajar" }, selected = state.category == cat, onClick = { vm.load(cat) })
                 }
             }
+            (state.videos as? UiState.Success)?.data?.let { PrefetchThumbnails(it) }
             PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = vm::refresh, modifier = Modifier.fillMaxSize()) {
                 when (val s = state.videos) {
                     is UiState.Loading -> LazyColumn(Modifier.fillMaxSize()) { items(5) { VideoCardShimmer() } }

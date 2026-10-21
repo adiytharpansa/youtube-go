@@ -80,13 +80,18 @@ class NewPipeVideoRepository @Inject constructor(
 
     private fun watchUrl(id: String) = "https://www.youtube.com/watch?v=$id"
 
+    /** Pilih thumbnail ~400px tinggi (cukup tajam untuk kartu, jauh lebih kecil dari maxres); cadangan: terbesar yang ada. */
+    private fun List<org.schabi.newpipe.extractor.Image>.pickThumbnail(): String =
+        filter { it.height in 150..500 }.minByOrNull { kotlin.math.abs(it.height - 400) }?.url
+            ?: maxByOrNull { it.height }?.url ?: ""
+
     private fun StreamInfoItem.toSummary(): VideoSummary = VideoSummary(
         id = idFromWatchUrl(url),
         title = name ?: "",
         author = uploaderName ?: "",
         authorId = channelKeyFromUrl(uploaderUrl ?: ""),
         authorAvatarUrl = uploaderAvatars.maxByOrNull { it.height }?.url ?: "",
-        thumbnailUrl = thumbnails.maxByOrNull { it.height }?.url ?: "",
+        thumbnailUrl = thumbnails.pickThumbnail(),
         lengthSeconds = duration,
         viewCount = viewCount,
         published = runCatching { uploadDate?.offsetDateTime()?.toEpochSecond() }.getOrNull() ?: 0L,

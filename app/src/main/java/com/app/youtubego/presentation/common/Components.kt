@@ -81,3 +81,18 @@ fun ErrorBox(message: String, onRetry: () -> Unit) {
         androidx.compose.material3.Button(onClick = onRetry) { Text("Coba lagi") }
     }
 }
+
+/** Unduh thumbnail daftar ke cache sebelum item masuk layar, sehingga saat digulir langsung tampil. */
+@Composable
+fun PrefetchThumbnails(videos: List<VideoSummary>) {
+    val ctx = LocalContext.current
+    LaunchedEffect(videos.size) {
+        val loader = coil.Coil.imageLoader(ctx)
+        videos.forEach { v ->
+            if (v.thumbnailUrl.isNotBlank()) loader.enqueue(
+                ImageRequest.Builder(ctx).data(v.thumbnailUrl).size(400, 225)
+                    .memoryCachePolicy(CachePolicy.DISABLED).diskCachePolicy(CachePolicy.ENABLED).build()
+            )
+        }
+    }
+}
