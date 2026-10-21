@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -81,7 +82,7 @@ fun VideoCardPro(
     val pressScale by androidx.compose.animation.core.animateFloatAsState(
         if (pressed) 0.975f else 1f, androidx.compose.animation.core.tween(if (pressed) 70 else 140), label = "press",
     )
-    // Dua baris seperti aplikasi YouTube modern: nama channel, lalu statistik (tidak terpotong "...").
+    // Statistik: tontonan + waktu unggah (atau "Sedang live").
     val stats = listOfNotNull(
         if (video.isLive) "Sedang live" else "${formatViewsId(video.viewCount)} tontonan",
         formatRelativeTime(video.published).takeIf { it.isNotEmpty() && !video.isLive },
@@ -90,7 +91,7 @@ fun VideoCardPro(
     Column(
         modifier.fillMaxWidth()
             .graphicsLayer { scaleX = pressScale; scaleY = pressScale }
-            .clickable(interactionSource = pressSource, indication = null) { onClick(video.id) }
+            .clickable(interactionSource = pressSource, indication = null, onClickLabel = "Putar ${video.title}", role = Role.Button) { onClick(video.id) }
             .padding(bottom = 8.dp)
     ) {
         Box(
@@ -113,16 +114,23 @@ fun VideoCardPro(
                 Text(if (video.isLive) "LIVE" else formatDuration(video.lengthSeconds), color = Color.White, style = MaterialTheme.typography.labelSmall)
             }
         }
-        Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 10.dp), verticalAlignment = Alignment.Top) {
-            AsyncImage(
-                model = video.authorAvatarUrl, contentDescription = "Buka channel ${video.author}", contentScale = ContentScale.Crop,
-                modifier = Modifier.size(38.dp).clip(CircleShape).background(YgSurfaceVariant)
-                    .clickable(enabled = video.authorId.isNotBlank()) { onChannelClick(video.authorId) },
-            )
-            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+        // Skala jarak 4/8/12/16: avatar sejajar tepi thumbnail (12dp); area sentuh avatar 48dp.
+        Row(Modifier.padding(start = 7.dp, end = 4.dp, top = 7.dp), verticalAlignment = Alignment.Top) {
+            Box(
+                Modifier.size(48.dp).clip(CircleShape)
+                    .clickable(enabled = video.authorId.isNotBlank(), onClickLabel = "Buka channel ${video.author}", role = Role.Button) { onChannelClick(video.authorId) },
+                contentAlignment = Alignment.Center,
+            ) {
+                AsyncImage(
+                    model = video.authorAvatarUrl, contentDescription = null, contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(38.dp).clip(CircleShape).background(YgSurfaceVariant),
+                )
+            }
+            Column(Modifier.weight(1f).padding(start = 7.dp, top = 5.dp)) {
                 Text(video.title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                if (video.author.isNotBlank()) Text(video.author, color = YgMuted, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(stats, color = YgMuted, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // Satu baris "Channel • statistik": kartu lebih pendek, daftar lebih padat.
+                Text(listOfNotNull(video.author.takeIf { it.isNotBlank() }, stats).joinToString(" \u2022 "),
+                    color = YgMuted, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (actions.isNotEmpty()) {
                 IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, contentDescription = "Opsi lainnya", tint = YgMuted) }

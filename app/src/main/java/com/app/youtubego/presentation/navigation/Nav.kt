@@ -9,6 +9,9 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.graphicsLayer
+import com.app.youtubego.presentation.theme.pressScaleOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -85,8 +88,12 @@ fun YoutubeGoNavHost() {
             if (showBar) NavigationBar(containerColor = YgSurface, tonalElevation = 0.dp) {
                 tabs.forEach { tab ->
                     val selected = dest?.hierarchy?.any { it.route == tab.route } == true
+                    val navSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                    val navScale = pressScaleOf(navSource, 0.9f)
                     NavigationBarItem(
                         selected = selected,
+                        interactionSource = navSource,
+                        modifier = Modifier.graphicsLayer { scaleX = navScale; scaleY = navScale },
                         onClick = {
                             nav.navigate(tab.route) {
                                 popUpTo(nav.graph.findStartDestination().id) { saveState = true }

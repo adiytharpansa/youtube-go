@@ -10,6 +10,8 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -34,6 +36,7 @@ import com.app.youtubego.presentation.library.LibraryViewModel
 import com.app.youtubego.presentation.library.VideoItem
 import com.app.youtubego.presentation.theme.YgAccent
 import com.app.youtubego.presentation.theme.YgMuted
+import com.app.youtubego.presentation.theme.YgSurface
 import com.app.youtubego.presentation.theme.YgSurfaceVariant
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.text.style.TextAlign
@@ -77,13 +80,23 @@ fun HomeScreen(
         },
     ) { pad ->
         Column(Modifier.padding(pad)) {
-            LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyRow(Modifier.padding(vertical = 8.dp), contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(HomeCategory.entries) { cat ->
                     YgChip(label = when (cat) { HomeCategory.FOR_YOU -> "Untuk Anda"; HomeCategory.ALL -> "Semua"; HomeCategory.MUSIC -> "Musik"; HomeCategory.GAMING -> "Game"; HomeCategory.MIX -> "Mix"; HomeCategory.NEWS -> "Berita"; HomeCategory.LEARN -> "Belajar" }, selected = state.category == cat, onClick = { vm.load(cat) })
                 }
             }
             (state.videos as? UiState.Success)?.data?.let { PrefetchThumbnails(it) }
-            PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = vm::refresh, modifier = Modifier.fillMaxSize()) {
+            // Indikator tarik-untuk-segarkan bergaya aplikasi (bukan lingkaran abu gelap bawaan).
+            val pullState = rememberPullToRefreshState()
+            PullToRefreshBox(
+                isRefreshing = state.refreshing, onRefresh = vm::refresh, state = pullState, modifier = Modifier.fillMaxSize(),
+                indicator = {
+                    PullToRefreshDefaults.Indicator(
+                        state = pullState, isRefreshing = state.refreshing, modifier = Modifier.align(Alignment.TopCenter),
+                        containerColor = YgSurface, color = YgAccent,
+                    )
+                },
+            ) {
                 when (val s = state.videos) {
                     is UiState.Loading -> LazyColumn(Modifier.fillMaxSize()) { items(5) { VideoCardShimmer() } }
                     is UiState.Error -> ErrorBox(s.message) { vm.retry() }

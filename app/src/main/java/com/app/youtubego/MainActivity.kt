@@ -16,6 +16,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.app.youtubego.data.local.UserLibraryStore
 import com.app.youtubego.presentation.navigation.YoutubeGoNavHost
 import com.app.youtubego.presentation.theme.DarkPalette
@@ -43,6 +44,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         val systemNight = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         applyTheme(ThemeMode.fromId(library.themeMode.value).resolveDark(systemNight))

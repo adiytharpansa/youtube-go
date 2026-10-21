@@ -17,6 +17,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material3.Icon
+import com.app.youtubego.presentation.theme.YgAccent
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
@@ -77,9 +81,15 @@ fun formatViews(n: Long): String = when {
 }
 @Composable
 fun ErrorBox(message: String, onRetry: () -> Unit) {
+    // Keadaan error seragam dengan EmptyState: ikon, pesan, satu aksi jelas (tinggi menyesuaikan isi, aman untuk footer daftar).
     Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(message, color = YgMuted); Spacer(Modifier.height(12.dp))
-        androidx.compose.material3.Button(onClick = onRetry) { Text("Coba lagi") }
+        Box(Modifier.size(64.dp).clip(CircleShape).background(YgSurfaceVariant), contentAlignment = Alignment.Center) {
+            Icon(Icons.Outlined.CloudOff, contentDescription = null, tint = YgAccent, modifier = Modifier.size(30.dp))
+        }
+        Spacer(Modifier.height(16.dp))
+        Text(message, color = YgMuted, style = MaterialTheme.typography.bodyMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Spacer(Modifier.height(16.dp))
+        GradientButton("Coba lagi", onRetry)
     }
 }
 

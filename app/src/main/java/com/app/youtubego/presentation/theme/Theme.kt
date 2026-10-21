@@ -1,6 +1,7 @@
 package com.app.youtubego.presentation.theme
 import android.app.Activity
 import android.content.ContextWrapper
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.ripple.RippleAlpha
 import androidx.compose.material3.*
@@ -89,7 +90,7 @@ fun YouTubeGOTheme(darkTheme: Boolean = true, content: @Composable () -> Unit) {
     val palette = if (darkTheme) DarkPalette else LightPalette
     val typography = remember(darkTheme) { ygTypography(palette.muted) }
     MaterialTheme(colorScheme = if (darkTheme) DarkColors else LightColors, typography = typography, shapes = YgShapes) {
-        CompositionLocalProvider(LocalRippleConfiguration provides NoRipple, LocalYgPalette provides palette, content = content)
+        CompositionLocalProvider(LocalRippleConfiguration provides NoRipple, LocalIndication provides PressIndication, LocalYgPalette provides palette, content = content)
     }
 }
 

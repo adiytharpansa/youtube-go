@@ -75,6 +75,8 @@ import com.app.youtubego.presentation.library.LibraryViewModel
 import com.app.youtubego.presentation.library.PlaylistPickerDialog
 import com.app.youtubego.presentation.library.VideoItem
 import com.app.youtubego.data.local.DownloadStatus
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import com.app.youtubego.presentation.theme.ForceLightStatusBarIcons
 import com.app.youtubego.presentation.theme.YgMuted
 import com.app.youtubego.presentation.theme.YgSurface
@@ -159,6 +161,8 @@ fun PlayerScreen(
     var shareAt by remember { mutableStateOf<Pair<String, Long>?>(null) }
     // Geser turun di pemutar (portrait): layar ikut turun & mengecil mengikuti jari; lepas lewat ambang = kecilkan.
     ForceLightStatusBarIcons()
+    val haptic = LocalHapticFeedback.current
+    fun tick() = haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
     val dragAnim = remember { Animatable(0f) }
     val dragScope = rememberCoroutineScope()
     val minimizeThresholdPx = with(LocalDensity.current) { 96.dp.toPx() }
@@ -471,14 +475,14 @@ fun PlayerScreen(
                         val subscribed = d.summary.authorId in subscribedIds
                         LazyColumn(Modifier.fillMaxSize()) {
                             item { TitleBlock(d) { sheet = PlayerSheet.DESCRIPTION } }
-                            item { ChannelRow(d, subscribed, onOpen = { onChannelClick(d.summary.authorId) }) { vm.toggleSubscribe(d.summary.authorId) } }
+                            item { ChannelRow(d, subscribed, onOpen = { onChannelClick(d.summary.authorId) }) { tick(); vm.toggleSubscribe(d.summary.authorId) } }
                             item {
                                 val downloadStatus = downloadItems.firstOrNull { it.video.id == videoId }?.status
                                 ActionRow(
                                     downloadStatus = downloadStatus, onDownload = vm::download, onPlaylist = { playlistDialog = true },
                                     likeLabel = if (d.likeCount + (if (liked) 1 else 0) > 0) formatViewsId(d.likeCount + (if (liked) 1 else 0)) else "Suka",
                                     liked = liked, saved = saved,
-                                    onLike = vm::toggleLike, onSave = vm::toggleSave,
+                                    onLike = { tick(); vm.toggleLike() }, onSave = { tick(); vm.toggleSave() },
                                     onShare = {
                                         val sec = player.currentPosition / 1000
                                         // Sudah ditonton >= 5 dtk: tawarkan "Mulai dari 1:23" seperti YouTube.

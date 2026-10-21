@@ -1,2 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources><style name="Theme.YouTubeGO" parent="android:Theme.Material.NoActionBar"><item name="android:windowBackground">#FFFFFF</item><item name="android:statusBarColor">#FFFFFF</item></style></resources>
+<resources>
+    <style name="Theme.YouTubeGO" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FFFFFF</item>
+        <item name="android:statusBarColor">#FFFFFF</item>
+    </style>
+    <!-- Splash resmi (SplashScreen API, Android 12+ dan kompatibel hingga API 24): logo di tengah, lalu beralih ke Theme.YouTubeGO. -->
+    <style name="Theme.YouTubeGO.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_bg</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_logo_mark</item>
+        <item name="postSplashScreenTheme">@style/Theme.YouTubeGO</item>
+    </style>
+</resources>
