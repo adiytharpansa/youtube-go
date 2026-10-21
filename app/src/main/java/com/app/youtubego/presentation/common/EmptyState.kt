@@ -67,4 +67,3 @@ fun EmptyState(
         }
     }
 }
-

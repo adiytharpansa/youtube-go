@@ -41,4 +41,3 @@ fun SearchScreen(onBack: () -> Unit, onVideoClick: (String) -> Unit, onChannelCl
         }
     }
 }
-

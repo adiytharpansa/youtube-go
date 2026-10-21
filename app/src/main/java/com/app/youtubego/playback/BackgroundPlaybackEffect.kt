@@ -38,4 +38,3 @@ fun android.content.Context.findComponentActivity(): ComponentActivity? {
     while (c is ContextWrapper) { if (c is ComponentActivity) return c; c = c.baseContext }
     return null
 }
-
