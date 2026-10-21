@@ -12,6 +12,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -73,13 +75,24 @@ fun VideoCardPro(
     watchedFraction: Float = 0f,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    // Umpan balik sentuh tanpa ripple: kartu mengecil sedikit saat ditekan, kembali dengan pegas singkat.
+    val pressSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val pressed by pressSource.collectIsPressedAsState()
+    val pressScale by androidx.compose.animation.core.animateFloatAsState(
+        if (pressed) 0.975f else 1f, androidx.compose.animation.core.tween(if (pressed) 70 else 140), label = "press",
+    )
     // Dua baris seperti aplikasi YouTube modern: nama channel, lalu statistik (tidak terpotong "...").
     val stats = listOfNotNull(
         if (video.isLive) "Sedang live" else "${formatViewsId(video.viewCount)} tontonan",
         formatRelativeTime(video.published).takeIf { it.isNotEmpty() && !video.isLive },
     ).joinToString(" • ")
 
-    Column(modifier.fillMaxWidth().clickable { onClick(video.id) }.padding(bottom = 8.dp)) {
+    Column(
+        modifier.fillMaxWidth()
+            .graphicsLayer { scaleX = pressScale; scaleY = pressScale }
+            .clickable(interactionSource = pressSource, indication = null) { onClick(video.id) }
+            .padding(bottom = 8.dp)
+    ) {
         Box(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp).aspectRatio(16f / 9f)
                 .clip(MaterialTheme.shapes.medium).background(YgSurfaceVariant)

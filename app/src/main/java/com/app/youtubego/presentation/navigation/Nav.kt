@@ -106,7 +106,14 @@ fun YoutubeGoNavHost() {
             }
         },
     ) { pad ->
-        NavHost(nav, startDestination = Routes.HOME, modifier = Modifier.padding(bottom = pad.calculateBottomPadding())) {
+        NavHost(
+            nav, startDestination = Routes.HOME, modifier = Modifier.padding(bottom = pad.calculateBottomPadding()),
+            // Transisi bawaan 700 ms terasa lambat; 120-180 ms terasa instan tapi tetap halus.
+            enterTransition = { androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(160)) },
+            exitTransition = { androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(90)) },
+            popEnterTransition = { androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(160)) },
+            popExitTransition = { androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(90)) },
+        ) {
             composable(Routes.HOME) {
                 HomeScreen(onVideoClick = openPlayer, onSearchClick = { nav.navigate(Routes.SEARCH) }, onChannelClick = openChannel)
             }

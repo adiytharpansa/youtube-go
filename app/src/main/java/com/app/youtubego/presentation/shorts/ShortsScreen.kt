@@ -295,6 +295,9 @@ private fun ShortPlayer(video: VideoSummary, vm: ShortsViewModel) {
     val exo = remember(u) {
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(DefaultMediaSourceFactory(vm.dataSourceFactory))
+            // Mulai putar setelah 500 ms terisi (bawaan 2,5 dtk): Short terasa langsung jalan saat digeser.
+            .setLoadControl(androidx.media3.exoplayer.DefaultLoadControl.Builder()
+                .setBufferDurationsMs(5_000, 20_000, 500, 1_000).setPrioritizeTimeOverSizeThresholds(true).build())
             // Fokus audio: Short mulai -> pemutar video utama/notifikasi dijeda otomatis (tak tumpang tindih).
             .setAudioAttributes(androidx.media3.common.AudioAttributes.Builder().setUsage(androidx.media3.common.C.USAGE_MEDIA).setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
             .setHandleAudioBecomingNoisy(true)
