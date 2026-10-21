@@ -45,6 +45,13 @@ Rincian lengkap ada di [BLUEPRINT.md](BLUEPRINT.md).
 ## Build debug (di GitHub Actions, tanpa PC)
 Actions → **Build Debug APK** → Run workflow → unduh artefak `youtube-go-debug`.
 
+## Baru di v1.52 - polesan "Anda" & Pengaturan
+- **Anda**: judul seragam dengan tab lain, Pengaturan jadi ikon di header; kartu "Terakhir ditonton" tidak pernah kosong lagi (ukuran gambar sesuai kartu, thumbnail cadangan, latar + ikon putar, garis progres menonton); garis pemisah berat diganti jarak.
+- **Pengaturan**: bulatan saklar putih (akar masalahnya `onPrimary` ungu bawaan M3, kini putih di kedua tema), pengelompokan dalam kartu dengan ikon, tindakan merusak berwarna merah + tombol konfirmasi merah, Snackbar (dengan "Urungkan" untuk riwayat) menggantikan Toast, teks lebih ringkas, tidak tertimpa pil gestur.
+- **Baru di Pengaturan**: Hapus cache gambar (menampilkan ukuran), Lisensi sumber terbuka, ketuk versi untuk menyalin info, getar halus pada saklar.
+- **Mini player**: thumbnail diberi inset, ikon jeda/tutup lebih ringkas.
+- **Status bar**: ikon dipulihkan sesuai tema dengan penghitung referensi (tidak lagi bisa tertinggal pudar setelah pemutar/Shorts).
+
 ## Baru di v1.51 - polesan tampilan
 - **Font**: judul layar, tombol, chip, dan label navigasi memakai Poppins (res/font; lisensi SIL OFL 1.1). Badan teks dan judul video tetap font sistem agar padat. Satu titik pengganti ada di `theme/TypeAndShape.kt` (`YgDisplayFamily`).
 - **Langganan**: header "Langganan" selalu tampil; keadaan kosong punya baris "Channel populer" (dari video trending asli) dengan tombol Langganan langsung.

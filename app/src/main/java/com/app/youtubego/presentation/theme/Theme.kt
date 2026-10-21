@@ -69,12 +69,12 @@ val YgOnSurface: Color @Composable @ReadOnlyComposable get() = LocalYgPalette.cu
 val YgMuted: Color @Composable @ReadOnlyComposable get() = LocalYgPalette.current.muted
 
 private val DarkColors = darkColorScheme(
-    primary = YgAccent, secondary = YgAccent2, background = DarkPalette.background, surface = DarkPalette.surface,
+    primary = YgAccent, onPrimary = Color.White, secondary = YgAccent2, onSecondary = Color.White, background = DarkPalette.background, surface = DarkPalette.surface,
     surfaceVariant = DarkPalette.surfaceVariant, outline = DarkPalette.outline, onBackground = DarkPalette.onSurface,
     onSurface = DarkPalette.onSurface, onSurfaceVariant = DarkPalette.muted, error = Color(0xFFFF5B74),
 )
 private val LightColors = lightColorScheme(
-    primary = YgAccent, secondary = YgAccent2, background = LightPalette.background, surface = LightPalette.surface,
+    primary = YgAccent, onPrimary = Color.White, secondary = YgAccent2, onSecondary = Color.White, background = LightPalette.background, surface = LightPalette.surface,
     surfaceVariant = LightPalette.surfaceVariant, outline = Color(0xFF7D8590), onBackground = LightPalette.onSurface,
     onSurface = LightPalette.onSurface, onSurfaceVariant = LightPalette.muted, error = Color(0xFFD93251),
     // Dialog, menu, dan lembar bawah memakai tingkat "surfaceContainer": diset netral agar tidak berona ungu bawaan M3.
@@ -94,20 +94,29 @@ fun YouTubeGOTheme(darkTheme: Boolean = true, content: @Composable () -> Unit) {
     }
 }
 
+/** Jumlah layar yang sedang memaksa ikon status bar putih (mis. pemutar + Shorts bisa tumpang tindih saat transisi). */
+private var forcedLightIcons = 0
+
 /**
  * Untuk layar yang bagian atasnya selalu hitam (pemutar, Shorts): paksa ikon status bar tetap putih
- * walau tema terang aktif, lalu kembalikan saat layar ditinggalkan.
+ * walau tema terang aktif. Saat layar terakhir yang memaksa ditinggalkan, ikon dikembalikan sesuai TEMA
+ * aktif (terang di tema gelap, gelap di tema terang), bukan nilai yang pernah ditangkap, sehingga
+ * transisi yang tumpang tindih tidak lagi meninggalkan ikon pudar di layar lain.
  */
 @Composable
 fun ForceLightStatusBarIcons() {
     val view = LocalView.current
-    DisposableEffect(view) {
+    val darkTheme = LocalYgPalette.current === DarkPalette
+    DisposableEffect(view, darkTheme) {
         var ctx = view.context
         while (ctx is ContextWrapper && ctx !is Activity) ctx = ctx.baseContext
         val window = (ctx as? Activity)?.window
         val ctrl = window?.let { WindowCompat.getInsetsController(it, view) }
-        val previous = ctrl?.isAppearanceLightStatusBars
+        forcedLightIcons++
         ctrl?.isAppearanceLightStatusBars = false
-        onDispose { if (ctrl != null && previous != null) ctrl.isAppearanceLightStatusBars = previous }
+        onDispose {
+            forcedLightIcons = (forcedLightIcons - 1).coerceAtLeast(0)
+            if (forcedLightIcons == 0) ctrl?.isAppearanceLightStatusBars = !darkTheme
+        }
     }
 }

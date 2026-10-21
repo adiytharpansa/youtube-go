@@ -141,11 +141,16 @@ fun SubPageTopBar(title: String, onBack: () -> Unit, actions: @Composable RowSco
 }
 
 @Composable
-fun ConfirmDialog(title: String, message: String, confirmLabel: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+fun ConfirmDialog(title: String, message: String, confirmLabel: String, onConfirm: () -> Unit, destructive: Boolean = false, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss, containerColor = YgSurface,
         title = { Text(title) }, text = { Text(message, color = YgMuted) },
-        confirmButton = { TextButton(onClick = { onConfirm(); onDismiss() }) { Text(confirmLabel) } },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(); onDismiss() },
+                colors = if (destructive) ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error) else ButtonDefaults.textButtonColors(),
+            ) { Text(confirmLabel) }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } },
     )
 }

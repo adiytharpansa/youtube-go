@@ -39,6 +39,7 @@ import com.app.youtubego.domain.model.VideoSummary
 import com.app.youtubego.domain.repository.VideoRepository
 import com.app.youtubego.domain.usecase.toFriendlyMessage
 import com.app.youtubego.presentation.common.EmptyState
+import com.app.youtubego.presentation.common.ScreenHeader
 import com.app.youtubego.presentation.common.ErrorBox
 import com.app.youtubego.presentation.common.UiState
 import com.app.youtubego.presentation.common.VideoCardShimmer
@@ -155,7 +156,7 @@ fun SubscriptionsScreen(
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         // Header selalu ada (kosong maupun berisi) supaya layar tidak melompat setelah berlangganan.
-        Text("Langganan", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 8.dp))
+        ScreenHeader("Langganan")
         if (state.subscribedCount == 0) {
             val suggestions by vm.suggestions.collectAsState()
             LaunchedEffect(Unit) { vm.loadSuggestions() }

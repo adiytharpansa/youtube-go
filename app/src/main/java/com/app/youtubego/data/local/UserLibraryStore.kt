@@ -105,6 +105,13 @@ class UserLibraryStore @Inject constructor(@ApplicationContext context: Context)
         prefs.edit().putString("history", next.joinToString(",")).apply()
     }
 
+    /** Mengembalikan riwayat (untuk "Urungkan" setelah dihapus semua). */
+    @Synchronized
+    fun restoreHistory(ids: List<String>) {
+        _history.value = ids
+        prefs.edit().putString("history", ids.joinToString(",")).apply()
+    }
+
     @Synchronized
     fun clearHistory() {
         _history.value = emptyList()

@@ -75,7 +75,7 @@ fun HistoryScreen(onBack: () -> Unit, onVideoClick: (String) -> Unit, onChannelC
         },
         extraActionsFor = { v -> listOf(VideoAction("Hapus dari riwayat", Icons.Filled.Delete) { vm.removeHistory(v.id) }) },
     )
-    if (confirm) ConfirmDialog("Hapus semua riwayat?", "Daftar video yang pernah kamu tonton akan dikosongkan.", "Hapus", { vm.clearHistory() }) { confirm = false }
+    if (confirm) ConfirmDialog("Hapus semua riwayat?", "Daftar video yang pernah kamu tonton akan dikosongkan.", "Hapus", { vm.clearHistory() }, destructive = true) { confirm = false }
 }
 
 @Composable
@@ -155,7 +155,7 @@ fun PlaylistsScreen(onBack: () -> Unit, onOpen: (String) -> Unit, vm: LibraryVie
         NameDialog("Ubah nama playlist", playlists.firstOrNull { it.id == id }?.name.orEmpty(), "Simpan", { vm.renamePlaylist(id, it) }) { renaming = null }
     }
     deleting?.let { id ->
-        ConfirmDialog("Hapus playlist?", "Playlist dihapus, videonya tidak ikut terhapus dari perangkat.", "Hapus", { vm.deletePlaylist(id) }) { deleting = null }
+        ConfirmDialog("Hapus playlist?", "Playlist dihapus, videonya tidak ikut terhapus dari perangkat.", "Hapus", { vm.deletePlaylist(id) }, destructive = true) { deleting = null }
     }
 }
 

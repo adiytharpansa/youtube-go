@@ -129,7 +129,7 @@ fun MiniPlayerBar(onOpen: (String) -> Unit, vm: MiniPlayerViewModel = hiltViewMo
                 .clickable { onOpen(id) },
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.padding(start = 8.dp).width(96.dp).aspectRatio(16f / 9f).background(Color.Black)) {
+            Box(Modifier.padding(start = 12.dp).width(96.dp).aspectRatio(16f / 9f).background(Color.Black)) {
                 AndroidView(
                     factory = { ctx ->
                         PlayerView(ctx).apply {
@@ -146,10 +146,12 @@ fun MiniPlayerBar(onOpen: (String) -> Unit, vm: MiniPlayerViewModel = hiltViewMo
                 Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                 if (author.isNotBlank()) Text(author, maxLines = 1, overflow = TextOverflow.Ellipsis, color = YgMuted, style = MaterialTheme.typography.labelSmall)
             }
-            IconButton(onClick = { if (ended) { player.seekTo(0); player.play() } else if (playing) player.pause() else player.play() }) {
-                Icon(if (ended) Icons.Default.Replay else if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, "Putar/jeda")
+            // Ikon 22dp di area sentuh 44dp: ringkas secara visual, tetap mudah ditekan.
+            IconButton(onClick = { if (ended) { player.seekTo(0); player.play() } else if (playing) player.pause() else player.play() }, modifier = Modifier.size(44.dp)) {
+                Icon(if (ended) Icons.Default.Replay else if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, "Putar/jeda", modifier = Modifier.size(22.dp))
             }
-            IconButton(onClick = { holder.stopIfCurrent(id) }) { Icon(Icons.Default.Close, "Tutup") }
+            IconButton(onClick = { holder.stopIfCurrent(id) }, modifier = Modifier.size(44.dp)) { Icon(Icons.Default.Close, "Tutup", modifier = Modifier.size(20.dp)) }
+            Spacer(Modifier.width(4.dp))
         }
     }
 }
