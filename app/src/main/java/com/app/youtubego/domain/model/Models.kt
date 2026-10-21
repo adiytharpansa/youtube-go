@@ -1,5 +1,5 @@
 package com.app.youtubego.domain.model
-/** Model domain: bersih dari anotasi jaringan, URL sudah ditulis ulang ke proksi. */
+/** Model domain: bersih dari anotasi jaringan; semua data diekstrak di perangkat. */
 data class VideoSummary(
     val id: String, val title: String, val author: String, val authorId: String,
     val authorAvatarUrl: String, val thumbnailUrl: String,
@@ -10,9 +10,9 @@ data class CaptionTrack(val label: String, val languageCode: String, val url: St
 data class VideoDetail(
     val summary: VideoSummary, val description: String, val likeCount: Long,
     val subscriberText: String,
-    /** formatStreams gabungan (video+audio) - jalur putar utama hemat data, mulai kualitas terendah yang layak. */
+    /** Stream gabungan progresif (video+audio) dari ekstraksi perangkat, mulai kualitas terendah yang layak. */
     val combinedStreams: List<StreamOption>,
-    /** dashUrl dari API bila ada - jalur adaptif (1080p) tahap berikutnya. */
+    /** URL manifes DASH dari ekstraksi perangkat bila ada - jalur adaptif. */
     val dashUrl: String?, val hlsUrl: String?,
     val captions: List<CaptionTrack>, val recommendations: List<VideoSummary>,
 )

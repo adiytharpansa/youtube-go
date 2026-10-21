@@ -7,6 +7,16 @@ Arsitektur: **MVVM + Clean Architecture** (data / domain / presentation), Hilt, 
 melalui proksi Vercel YouTube GO yang sudah live (thumbnail & stream wajib lewat proksi karena dipagari anti-bot Anubis).
 Rincian lengkap ada di [BLUEPRINT.md](BLUEPRINT.md).
 
+## Baru di v1.45 - 100% di perangkat (tanpa server perantara)
+
+- Semua data & putar kini diekstrak langsung di HP dengan NewPipeExtractor: beranda, pencarian,
+  saran, detail, komentar, channel, dan stream. Tumpukan Invidious (instance publik) + proksi
+  Vercel DIBUANG dari aplikasi - terukur tidak bisa diandalkan (stream gabungan kosong, manifes
+  DASH cangkang kosong), dan permintaan dari IP pengguna tidak menabrak dinding pusat data.
+- Pemutar: failover antar sumber - satu kali ambil URL segar, lalu pindah ke sumber berikutnya;
+  pesan galat menampilkan kode HTTP sebenarnya. Log diagnosis bertag `YGO_PLAYER`
+  (`adb logcat -s YGO_PLAYER`): hasil ekstraksi, sumber yang dipakai, dan penyebab gagal (host saja).
+
 ## Build debug (di GitHub Actions, tanpa PC)
 Actions → **Build Debug APK** → Run workflow → unduh artefak `youtube-go-debug`.
 

@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import android.util.Rational
 import android.view.ViewGroup
 import androidx.activity.ComponentActivity
@@ -54,6 +55,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.app.youtubego.domain.model.CaptionTrack
@@ -143,25 +145,33 @@ fun PlayerScreen(
     }
     var playerError by remember(videoId) { mutableStateOf<String?>(null) }
     var autoRetries by remember(videoId) { mutableIntStateOf(0) }
+    /** Indeks sumber putar yang sedang dicoba (0 = prioritas utama). Naik tiap sumber gagal, supaya tidak mengulang URL yang sama. */
+    var sourceSkip by remember(videoId) { mutableIntStateOf(0) }
+    /** Kode HTTP terakhir yang ditolak server (mis. 403/500/505), untuk pesan galat yang bisa dilacak. */
+    var lastHttp by remember(videoId) { mutableStateOf<Int?>(null) }
     DisposableEffect(player, videoId) {
         val l = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_READY) autoRetries = 0
             }
             override fun onPlayerError(error: PlaybackException) {
-                // Jaringan putus / URL kedaluwarsa (HTTP 403): ambil URL SEGAR otomatis (maks. 2x) dan lanjut
-                // dari posisi terakhir, alih-alih langsung menampilkan galat.
+                // Jaringan putus / URL kedaluwarsa / ditolak server: coba URL SEGAR sekali, lalu PINDAH ke sumber
+                // berikutnya (perangkat -> proksi server) alih-alih mengulang URL yang sama dan menyerah.
+                val http = (error.cause as? HttpDataSource.InvalidResponseCodeException)?.responseCode
+                if (http != null) lastHttp = http
+                val failHost = (error.cause as? HttpDataSource.InvalidResponseCodeException)?.dataSpec?.uri?.host
+                Log.w("YGO_PLAYER", "putar gagal: kode=${error.errorCodeName} http=${http ?: "-"} host=${failHost ?: "-"} sumberKe=$sourceSkip")
                 val recoverable = error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ||
                     error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
-                    error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
-                if (recoverable && autoRetries < 2 && player.currentMediaItem?.mediaId == videoId) {
-                    autoRetries++
-                    vm.retry()
-                    return
+                    error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ||
+                    error.errorCode in 3000..3999 // galat parsing manifest/kontainer
+                if (recoverable && player.currentMediaItem?.mediaId == videoId) {
+                    if (autoRetries < 1) { autoRetries++; vm.retry(); return }
+                    if (sourceSkip < 5) { sourceSkip++; return } // efek di bawah memuat sumber berikutnya
                 }
                 playerError = when (error.errorCode) {
                     PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ->
-                        "Aliran video gagal diambil dari server (galat HTTP). Server video mungkin sedang bermasalah — coba lagi sebentar."
+                        "Aliran video gagal diambil dari server (galat HTTP${lastHttp?.let { " $it" }.orEmpty()}). Semua sumber sudah dicoba — coba lagi sebentar."
                     PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
                     PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ->
                         "Koneksi ke server video terputus atau terlalu lambat. Coba lagi."
@@ -210,7 +220,7 @@ fun PlayerScreen(
     // Hanya memuat ulang bila URL BERUBAH, dan membawa posisi terakhir: tidak ada lagi "restart dari 0"
     // saat detail API datang belakangan atau pengaturan kualitas berubah.
     var loadedKey by remember(videoId) { mutableStateOf<String?>(null) }
-    LaunchedEffect(deviceSettled, device, highQuality, state is UiState.Loading, detail?.combinedStreams?.firstOrNull()?.url, detail?.dashUrl, detail?.hlsUrl) {
+    LaunchedEffect(deviceSettled, device, highQuality, sourceSkip, state is UiState.Loading, detail?.combinedStreams?.firstOrNull()?.url, detail?.dashUrl, detail?.hlsUrl) {
         if (!deviceSettled) return@LaunchedEffect
         if (selectedStreamUrl != null) return@LaunchedEffect // pengguna memilih kualitas manual: jangan ditimpa
         val dev = device
@@ -226,17 +236,23 @@ fun PlayerScreen(
         val combined = (if (highQuality) d?.combinedStreams?.lastOrNull() else d?.combinedStreams?.firstOrNull())?.url
         val subs = d?.captions.orEmpty().filter { it.url.isNotBlank() }
         val summary = d?.summary ?: dev?.summary
-        val (uri, mime, isAdaptive) = when {
-            !devDash.isNullOrBlank() -> Triple(devDash, MimeTypes.APPLICATION_MPD, true)
-            !devCombined.isNullOrBlank() -> Triple(devCombined, null, false)
-            !devHls.isNullOrBlank() -> Triple(devHls, MimeTypes.APPLICATION_M3U8, true)
-            !combined.isNullOrBlank() -> Triple(combined, null, false)
-            !d?.dashUrl.isNullOrBlank() -> Triple(d!!.dashUrl!!, MimeTypes.APPLICATION_MPD, true)
-            !d?.hlsUrl.isNullOrBlank() -> Triple(d!!.hlsUrl!!, MimeTypes.APPLICATION_M3U8, true)
-            else -> Triple(null, null, false)
-        }
+        // Daftar sumber berurutan prioritas; sourceSkip memilih yang ke-n bila sumber sebelumnya gagal diputar.
+        val candidates = listOfNotNull(
+            devDash?.takeIf { it.isNotBlank() }?.let { Triple(it, MimeTypes.APPLICATION_MPD, true) },
+            devCombined?.takeIf { it.isNotBlank() }?.let { Triple<String, String?, Boolean>(it, null, false) },
+            devHls?.takeIf { it.isNotBlank() }?.let { Triple(it, MimeTypes.APPLICATION_M3U8, true) },
+            combined?.takeIf { it.isNotBlank() }?.let { Triple<String, String?, Boolean>(it, null, false) },
+            d?.dashUrl?.takeIf { it.isNotBlank() }?.let { Triple(it, MimeTypes.APPLICATION_MPD, true) },
+            d?.hlsUrl?.takeIf { it.isNotBlank() }?.let { Triple(it, MimeTypes.APPLICATION_M3U8, true) },
+        ).distinctBy { it.first }
+        val pick = candidates.getOrNull(sourceSkip)
+        val uri: String? = pick?.first
+        val mime: String? = pick?.second
+        val isAdaptive: Boolean = pick?.third ?: false
         if (uri == null) {
-            if (state !is UiState.Error) playerError = "Format putar untuk video ini sedang tidak tersedia dari jalur mana pun. Coba lagi nanti atau pilih video lain."
+            if (state !is UiState.Error) playerError = if (sourceSkip > 0)
+                "Semua sumber video sudah dicoba tapi gagal${lastHttp?.let { " (HTTP $it)" }.orEmpty()}. Coba lagi nanti atau pilih video lain."
+            else "Format putar untuk video ini sedang tidak tersedia dari jalur mana pun. Coba lagi nanti atau pilih video lain."
             return@LaunchedEffect
         }
         if (loadedKey == uri) return@LaunchedEffect
@@ -246,6 +262,7 @@ fun PlayerScreen(
         if (loadedKey == null && holder.isCurrent(videoId, uri)) { loadedKey = uri; return@LaunchedEffect }
         val sameVideoReload = loadedKey != null
         val started = (activity as? ComponentActivity)?.lifecycle?.currentState?.isAtLeast(LifecycleState.STARTED) != false
+        Log.d("YGO_PLAYER", "pakai sumber ke-$sourceSkip: host=${android.net.Uri.parse(uri).host ?: "-"} mime=${mime ?: "progresif"}")
         holder.play(
             item,
             startPositionMs = if (sameVideoReload) player.currentPosition.coerceAtLeast(0L) else null,
@@ -339,7 +356,7 @@ fun PlayerScreen(
                     verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(msg, color = Color.White, style = MaterialTheme.typography.bodyMedium)
-                    TextButton(onClick = { playerError = null; vm.retry() }) { Text("Coba lagi") }
+                    TextButton(onClick = { playerError = null; sourceSkip = 0; autoRetries = 0; vm.retry() }) { Text("Coba lagi") }
                 }
             }
             if (ended && autoplay && nextVideo != null && !autoCancelled && !inPip) {

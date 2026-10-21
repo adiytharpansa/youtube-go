@@ -35,11 +35,8 @@ class GetVideoDetailUseCase @Inject constructor(private val repo: VideoRepositor
 fun Throwable.toFriendlyMessage(): String = when (this) {
     is java.net.SocketTimeoutException -> "Server video terlalu lambat merespons. Coba lagi sebentar."
     is java.io.IOException -> "Tidak ada koneksi ke server. Periksa internet lalu coba lagi."
-    is retrofit2.HttpException -> when {
-        code() >= 500 -> "Server video sedang bermasalah (galat ${code()}). Coba lagi sebentar."
-        code() == 404 -> "Video tidak tersedia atau sudah dihapus."
-        else -> "Permintaan ditolak server (galat ${code()})."
-    }
+    is org.schabi.newpipe.extractor.exceptions.ReCaptchaException -> "YouTube meminta verifikasi karena terlalu banyak permintaan. Tunggu sebentar lalu coba lagi."
+    is org.schabi.newpipe.extractor.exceptions.ExtractionException -> "Tidak dapat mengambil data dari YouTube. Coba lagi sebentar."
     else -> "Gagal memuat data. Coba lagi."
 }
 

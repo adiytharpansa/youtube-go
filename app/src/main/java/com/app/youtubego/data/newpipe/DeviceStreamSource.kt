@@ -1,5 +1,6 @@
 package com.app.youtubego.data.newpipe
 
+import android.util.Log
 import com.app.youtubego.domain.model.StreamOption
 import com.app.youtubego.domain.model.VideoSummary
 import kotlinx.coroutines.CoroutineDispatcher
@@ -48,7 +49,7 @@ class DeviceStreamSource @Inject constructor(
 
     /** [force] = true WAJIB untuk "coba lagi": URL lama mungkin kedaluwarsa/ditolak, jangan pakai cache. */
     suspend fun resolve(videoId: String, force: Boolean = false): Result<DevicePlayback> = withContext(io) {
-        if (!force) cache[videoId]?.takeIf { System.currentTimeMillis() - it.at < CACHE_TTL_MS }?.let { return@withContext Result.success(it.value) }
+        if (!force) cache[videoId]?.takeIf { System.currentTimeMillis() - it.at < CACHE_TTL_MS }?.let { Log.d(TAG, "ekstraksi $videoId: dari cache"); return@withContext Result.success(it.value) }
         runCatching {
             ensureInit()
             val extractor = ServiceList.YouTube.getStreamExtractor("https://www.youtube.com/watch?v=$videoId")
@@ -83,7 +84,7 @@ class DeviceStreamSource @Inject constructor(
                 likeCount = runCatching { extractor.likeCount }.getOrDefault(0L).coerceAtLeast(0L),
                 subscriberCount = runCatching { extractor.uploaderSubscriberCount }.getOrDefault(0L).coerceAtLeast(0L),
             ).also { cache[videoId] = Cached(System.currentTimeMillis(), it) }
-        }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+        }.onSuccess { Log.d(TAG, "ekstraksi $videoId OK: gabungan=${it.combined.size} dash=${it.dashUrl != null} hls=${it.hlsUrl != null}") }.onFailure { Log.w(TAG, "ekstraksi $videoId GAGAL: ${it.javaClass.simpleName}: ${it.message}"); if (it is kotlinx.coroutines.CancellationException) throw it }
     }
 
     private fun ensureInit() {
@@ -98,5 +99,5 @@ class DeviceStreamSource @Inject constructor(
         }
     }
 
-    private companion object { const val CACHE_TTL_MS = 20 * 60 * 1000L }
+    private companion object { const val CACHE_TTL_MS = 20 * 60 * 1000L; const val TAG = "YGO_PLAYER" }
 }
