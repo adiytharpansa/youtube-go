@@ -42,7 +42,7 @@ dependencies {
     implementation("com.google.dagger:hilt-android:2.52")
     ksp("com.google.dagger:hilt-compiler:2.52")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
-    // Networking: OkHttp (downloader NewPipeExtractor     // Networking: Retrofit + OkHttp + Kotlinx Serialization (kontrak: dokumen Invidious API) unduhan) + Kotlinx Serialization (penyimpanan lokal)
+    // Networking: OkHttp (downloader NewPipeExtractor dan unduhan) + Kotlinx Serialization (penyimpanan lokal)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     // Media3 / ExoPlayer
