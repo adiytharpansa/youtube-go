@@ -238,7 +238,10 @@ class NewPipeVideoRepository @Inject constructor(
                     url = it.content ?: "",
                 )
             },
-            recommendations = runCatching { extractor.relatedStreams?.items?.summaries() }.getOrNull() ?: emptyList(),
+            // YouTube sering mengubah struktur "video terkait": coba API baru (relatedItems) lalu yang lama.
+            recommendations = (runCatching { extractor.relatedItems?.items?.summaries() }.getOrNull()?.takeIf { it.isNotEmpty() }
+                ?: runCatching { extractor.relatedStreams?.items?.summaries() }.getOrNull()
+                ?: emptyList()).filter { it.id != id },
         )
     }
 

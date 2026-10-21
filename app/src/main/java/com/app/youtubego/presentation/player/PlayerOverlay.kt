@@ -4,6 +4,10 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import android.content.Context
+import android.media.AudioManager
+import android.provider.Settings
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -18,6 +22,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
+import coil.compose.AsyncImage
+import com.app.youtubego.domain.model.Chapter
+import com.app.youtubego.domain.model.Storyboard
+import com.app.youtubego.playback.findComponentActivity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -87,6 +99,8 @@ internal fun YtPlayerOverlay(
     onBack: () -> Unit,
     onEnterPip: () -> Unit,
     onNext: (() -> Unit)? = null,
+    storyboard: Storyboard? = null,
+    chapters: List<Chapter> = emptyList(),
 ) {
     var visible by remember { mutableStateOf(true) }
     var interaction by remember { mutableIntStateOf(0) }
@@ -99,6 +113,19 @@ internal fun YtPlayerOverlay(
     var boosted by remember { mutableStateOf(false) }
     val ended = snap.state == Player.STATE_ENDED
     val currentFlash by rememberUpdatedState(flash)
+    val ctx = LocalContext.current
+    val act = remember(ctx) { ctx.findComponentActivity() }
+    val audio = remember(ctx) { ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+    var hud by remember { mutableStateOf<Pair<String, Float>?>(null) }
+    var hudStamp by remember { mutableIntStateOf(0) }
+    LaunchedEffect(hudStamp) { if (hudStamp > 0) { delay(900); hud = null } }
+    fun brightnessNow(): Float = runCatching {
+        act?.window?.attributes?.screenBrightness?.takeIf { it >= 0f }
+            ?: (Settings.System.getInt(ctx.contentResolver, Settings.System.SCREEN_BRIGHTNESS, 128) / 255f)
+    }.getOrDefault(0.5f)
+    fun setBrightness(v: Float) { act?.window?.let { w -> w.attributes = w.attributes.apply { screenBrightness = v.coerceIn(0.02f, 1f) } } }
+    fun volumeNow(): Float = audio.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+    fun setVolume(v: Float) { audio.setStreamVolume(AudioManager.STREAM_MUSIC, (v * audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)).roundToInt(), 0) }
     val fullscreenNow by rememberUpdatedState(isFullscreen)
     /** Lompat 10 dtk per ketukan; ketukan beruntun ke arah sama menumpuk (10 -> 20 -> 30 dtk) seperti YouTube. */
     fun doSeek(dir: Int) {
@@ -163,15 +190,25 @@ internal fun YtPlayerOverlay(
                     },
                 )
             }.pointerInput(player) {
-                // Geser naik = layar penuh, geser turun = keluar layar penuh (seperti YouTube).
+                // Portrait: geser naik = layar penuh. Layar penuh: geser kiri = kecerahan, geser kanan = volume (seperti YouTube).
                 var acc = 0f
+                var left = true
+                var startVal = 0f
                 detectVerticalDragGestures(
-                    onDragStart = { acc = 0f },
-                    onVerticalDrag = { change, d -> change.consume(); acc += d },
-                    onDragEnd = {
-                        if (acc < -90f && !fullscreenNow) onToggleFullscreen()
-                        else if (acc > 90f && fullscreenNow) onToggleFullscreen()
+                    onDragStart = { o ->
+                        acc = 0f
+                        left = o.x < size.width / 2f
+                        if (fullscreenNow) startVal = if (left) brightnessNow() else volumeNow()
                     },
+                    onVerticalDrag = { change, d ->
+                        change.consume(); acc += d
+                        if (fullscreenNow) {
+                            val v = (startVal - acc / size.height * 1.4f).coerceIn(0f, 1f)
+                            if (left) { setBrightness(v); hud = "Kecerahan" to v } else { setVolume(v); hud = "Volume" to v }
+                            hudStamp++
+                        }
+                    },
+                    onDragEnd = { if (!fullscreenNow && acc < -90f) onToggleFullscreen() },
                 )
             },
         )
@@ -192,6 +229,15 @@ internal fun YtPlayerOverlay(
                 Modifier.align(Alignment.TopCenter).padding(top = 10.dp).clip(CircleShape).background(Color.Black.copy(0.6f)).padding(horizontal = 12.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) { Icon(Icons.Default.FastForward, null, tint = Color.White, modifier = Modifier.size(16.dp)); Text(" 2x", color = Color.White, style = MaterialTheme.typography.labelMedium) }
+        }
+        hud?.let { (label, v) ->
+            Column(
+                Modifier.align(Alignment.Center).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).background(Color.Black.copy(0.65f)).padding(horizontal = 18.dp, vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text("$label ${(v * 100).roundToInt()}%", color = Color.White, style = MaterialTheme.typography.labelLarge)
+                Box(Modifier.padding(top = 6.dp).width(110.dp).height(3.dp).background(Color.White.copy(0.3f))) { Box(Modifier.fillMaxWidth(v).fillMaxHeight().background(Color.White)) }
+            }
         }
         if (buffering) CircularProgressIndicator(Modifier.align(Alignment.Center).size(40.dp), color = Color.White, strokeWidth = 3.dp)
 
@@ -224,11 +270,18 @@ internal fun YtPlayerOverlay(
                 }
                 // Tombol tengah: sebelumnya (ulang dari awal) - putar/jeda - berikutnya
                 if (scrubbing) {
-                    Text(
-                        formatDuration((scrubFrac * duration).toLong() / 1000), color = Color.White,
-                        style = MaterialTheme.typography.headlineSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                        modifier = Modifier.align(Alignment.Center).clip(CircleShape).background(Color.Black.copy(0.55f)).padding(horizontal = 16.dp, vertical = 6.dp),
-                    )
+                    val scrubMs = (scrubFrac * duration).toLong()
+                    Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                        if (storyboard != null) StoryboardPreview(storyboard, scrubMs)
+                        Text(
+                            formatDuration(scrubMs / 1000), color = Color.White,
+                            style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            modifier = Modifier.padding(top = 6.dp).clip(CircleShape).background(Color.Black.copy(0.55f)).padding(horizontal = 14.dp, vertical = 4.dp),
+                        )
+                        chapters.lastOrNull { it.startMs <= scrubMs }?.title?.takeIf { it.isNotBlank() }?.let {
+                            Text(it, color = Color.White, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp).widthIn(max = 240.dp))
+                        }
+                    }
                 } else if (!buffering) {
                     Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                         IconButton(
@@ -257,13 +310,18 @@ internal fun YtPlayerOverlay(
                 Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 14.dp, end = 4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         val shown = if (scrubbing) (scrubFrac * duration).toLong() else position
-                        Text("${formatDuration(shown / 1000)} / ${formatDuration(duration / 1000)}", color = Color.White, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                        val chapterTitle = chapters.lastOrNull { it.startMs <= shown }?.title.orEmpty()
+                        Text(
+                            "${formatDuration(shown / 1000)} / ${formatDuration(duration / 1000)}" + if (chapterTitle.isNotBlank()) "  •  $chapterTitle" else "",
+                            color = Color.White, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                        )
                         IconButton(onClick = onToggleFullscreen) {
                             Icon(if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen, "Layar penuh", tint = Color.White)
                         }
                     }
                     YtSeekBar(
                         positionFrac = posFrac, bufferedFrac = bufFrac, enabled = duration > 0,
+                        chapterFracs = if (duration > 0) chapters.drop(1).map { (it.startMs.toFloat() / duration).coerceIn(0f, 1f) } else emptyList(),
                         onScrubStart = { scrubbing = true },
                         onScrub = { scrubFrac = it },
                         onScrubEnd = { f -> if (duration > 0) player.seekTo((f * duration).toLong()); scrubbing = false; interaction++ },
@@ -281,6 +339,7 @@ private fun YtSeekBar(
     positionFrac: Float,
     bufferedFrac: Float,
     enabled: Boolean,
+    chapterFracs: List<Float>,
     onScrubStart: () -> Unit,
     onScrub: (Float) -> Unit,
     onScrubEnd: (Float) -> Unit,
@@ -310,9 +369,36 @@ private fun YtSeekBar(
         Box(Modifier.fillMaxWidth().height(3.dp).background(Color.White.copy(0.3f)))
         Box(Modifier.fillMaxWidth(bufferedFrac.coerceIn(0f, 1f)).height(3.dp).background(Color.White.copy(0.5f)))
         Box(Modifier.fillMaxWidth(positionFrac.coerceIn(0f, 1f)).height(3.dp).background(YtRed))
+        chapterFracs.forEach { f ->
+            Box(Modifier.offset { IntOffset((widthPx * f).roundToInt() - 1, 0) }.width(2.dp).height(3.dp).background(Color.Black.copy(0.75f)))
+        }
         Box(
             Modifier.offset { IntOffset((widthPx * positionFrac.coerceIn(0f, 1f)).roundToInt() - thumb.roundToPx() / 2, 0) }
                 .size(thumb).background(YtRed, CircleShape),
+        )
+    }
+}
+
+/** Pratinjau bingkai saat menggeser seekbar: memotong satu bingkai dari gambar sprite storyboard YouTube. */
+@Composable
+private fun StoryboardPreview(sb: Storyboard, posMs: Long) {
+    val perPage = (sb.perX * sb.perY).coerceAtLeast(1)
+    val idx = (posMs / sb.durationPerFrameMs.coerceAtLeast(1)).toInt().coerceIn(0, sb.total - 1)
+    val page = (idx / perPage).coerceAtMost(sb.urls.lastIndex)
+    val within = idx - page * perPage
+    val col = within % sb.perX
+    val row = within / sb.perX
+    val framesOnPage = minOf(perPage, sb.total - page * perPage).coerceAtLeast(1)
+    val cols = minOf(sb.perX, framesOnPage)
+    val rows = (framesOnPage + sb.perX - 1) / sb.perX
+    val previewW = 150.dp
+    val scale = previewW.value / sb.frameW
+    val previewH = (sb.frameH * scale).dp
+    Box(Modifier.size(previewW, previewH).clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp)).background(Color.Black).clipToBounds(), contentAlignment = Alignment.TopStart) {
+        AsyncImage(
+            model = sb.urls[page], contentDescription = null, contentScale = ContentScale.FillBounds,
+            modifier = Modifier.requiredSize((cols * sb.frameW * scale).dp, (rows * sb.frameH * scale).dp)
+                .offset((-col * sb.frameW * scale).dp, (-row * sb.frameH * scale).dp),
         )
     }
 }

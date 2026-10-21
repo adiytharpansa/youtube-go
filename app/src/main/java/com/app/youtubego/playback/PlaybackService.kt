@@ -2,6 +2,7 @@ package com.app.youtubego.playback
 
 import android.app.PendingIntent
 import android.content.Intent
+import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
@@ -34,8 +35,24 @@ class PlaybackService : MediaSessionService() {
         val open = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        session = MediaSession.Builder(this, player).setSessionActivity(open).build()
+        session = MediaSession.Builder(this, SkipPlayer(player)).setSessionActivity(open).build()
         player.addListener(idleWatcher)
+    }
+
+    /**
+     * Pemutar hanya memuat satu video, jadi Media3 tidak menampilkan tombol Sebelumnya/Berikutnya di notifikasi.
+     * Pembungkus ini menyatakan keduanya tersedia: Berikutnya = video rekomendasi pertama (lewat holder), Sebelumnya = ulang dari awal.
+     */
+    private inner class SkipPlayer(p: Player) : ForwardingPlayer(p) {
+        override fun getAvailableCommands(): Player.Commands = super.getAvailableCommands().buildUpon()
+            .addAll(Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM, Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+            .build()
+        override fun isCommandAvailable(command: Int): Boolean = availableCommands.contains(command)
+        override fun hasNextMediaItem(): Boolean = holder.upNextId != null
+        override fun seekToNext() { holder.requestNext() }
+        override fun seekToNextMediaItem() { holder.requestNext() }
+        override fun seekToPrevious() { seekTo(0) }
+        override fun seekToPreviousMediaItem() { seekTo(0) }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session

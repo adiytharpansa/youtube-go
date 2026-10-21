@@ -128,13 +128,17 @@ fun PlayerScreen(
         onDispose {
             // Pulihkan orientasi & system bars bila layar ditinggalkan saat fullscreen.
             activity?.let {
+                it.window.attributes = it.window.attributes.apply { screenBrightness = android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE }
                 it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                 WindowCompat.getInsetsController(it.window, it.window.decorView).show(WindowInsetsCompat.Type.systemBars())
             }
             // Keluar dari layar ini (kembali/pindah) = hentikan. Activity DIHANCURKAN (mis. digeser dari recent)
             // BUKAN keluar layar: biarkan service melanjutkan suara.
             val destroyed = (activity as? ComponentActivity)?.lifecycle?.currentState == LifecycleState.DESTROYED
-            if (!destroyed) holder.stopIfCurrent(videoId)
+            // Ditutup lewat "kecilkan" (mini player): biarkan pemutar tetap memuat video ini.
+            val minimized = holder.minimizeOnLeave
+            holder.minimizeOnLeave = false
+            if (!destroyed && !minimized) holder.stopIfCurrent(videoId)
         }
     }
     // Picture-in-Picture: otomatis saat pengguna meninggalkan aplikasi sambil memutar.
@@ -186,6 +190,13 @@ fun PlayerScreen(
         onDispose { player.removeListener(l) }
     }
     BackHandler(enabled = isFullscreen) { isFullscreen = false }
+    /** Kembali dari layar pemutar = KECILKAN ke mini player (seperti YouTube), kecuali video belum dimuat/sudah selesai. */
+    val minimize: () -> Unit = {
+        val st = player.playbackState
+        if (player.currentMediaItem?.mediaId == videoId && st != Player.STATE_IDLE && st != Player.STATE_ENDED) holder.minimizeOnLeave = true
+        onBack()
+    }
+    BackHandler(enabled = !isFullscreen && !inPip) { minimize() }
     // HP diputar ke landscape = layar penuh, kembali portrait = keluar layar penuh (seperti YouTube).
     LaunchedEffect(orientation) { isFullscreen = orientation == Configuration.ORIENTATION_LANDSCAPE }
     LaunchedEffect(isFullscreen) {
@@ -206,6 +217,7 @@ fun PlayerScreen(
     val captions = remember(detail) { detail?.captions.orEmpty().filter { it.url.isNotBlank() } }
     val nextVideo = detail?.recommendations?.firstOrNull { it.id != videoId }
     val ended = snap.state == Player.STATE_ENDED
+    LaunchedEffect(nextVideo?.id) { holder.upNextId = nextVideo?.id }
     var autoCancelled by remember(videoId) { mutableStateOf(false) }
     var countdown by remember(videoId) { mutableIntStateOf(5) }
     LaunchedEffect(ended, autoplay, nextVideo?.id, autoCancelled) {
@@ -324,6 +336,10 @@ fun PlayerScreen(
     val captionChoices = if (captions.isEmpty()) emptyList() else
         listOf(Choice("Mati", captionIndex < 0) { applyCaption(-1) }) + captions.mapIndexed { i, c -> Choice(c.label.ifBlank { c.languageCode }, captionIndex == i) { applyCaption(i) } }
     val captionLabel = if (captionIndex < 0) "Mati" else captions.getOrNull(captionIndex)?.label.orEmpty()
+    val sleepEndsAt by holder.sleepEndsAt.collectAsState()
+    val sleepLabel = sleepEndsAt?.let { "${((it - System.currentTimeMillis()) / 60_000L + 1).coerceAtLeast(1)} mnt lagi" } ?: "Mati"
+    val sleepChoices = listOf(Choice("Mati", sleepEndsAt == null) { holder.setSleepTimer(null) }) +
+        listOf(5, 15, 30, 45, 60).map { m -> Choice("$m menit", false) { holder.setSleepTimer(m) } }
     val canPip = remember(activity) { activity?.packageManager?.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE) == true }
 
     Column(
@@ -350,9 +366,10 @@ fun PlayerScreen(
                     onToggleCaptions = { applyCaption(if (captionIndex < 0) 0 else -1) },
                     onOpenSettings = { sheet = PlayerSheet.SETTINGS },
                     onToggleFullscreen = { isFullscreen = !isFullscreen },
-                    onBack = { if (isFullscreen) isFullscreen = false else onBack() },
+                    onBack = { if (isFullscreen) isFullscreen = false else minimize() },
                     onEnterPip = { enterPip(activity) },
                     onNext = nextVideo?.let { n -> { onVideoClick(n.id) } },
+                    storyboard = device?.storyboard, chapters = device?.chapters.orEmpty(),
                 )
             }
             playerError?.let { msg ->
@@ -438,6 +455,7 @@ fun PlayerScreen(
             qualityLabel, qualityChoices, speedLabel, speedChoices, captionLabel, captionChoices,
             loopOn = loopOn, onLoopChange = { loopOn = it; player.repeatMode = if (it) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF },
             zoomFill = zoomFill, onZoomChange = { zoomFill = it },
+            sleepLabel = sleepLabel, sleepChoices = sleepChoices,
         ) { sheet = null }
     }
 }

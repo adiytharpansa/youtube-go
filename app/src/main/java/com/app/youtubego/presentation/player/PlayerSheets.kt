@@ -36,7 +36,7 @@ internal fun cleanHtml(s: String): String =
     else androidx.core.text.HtmlCompat.fromHtml(s, androidx.core.text.HtmlCompat.FROM_HTML_MODE_COMPACT).toString().trim()
 
 internal data class Choice(val label: String, val selected: Boolean, val onPick: () -> Unit)
-private enum class SettingsPage { ROOT, QUALITY, SPEED, CAPTIONS }
+private enum class SettingsPage { ROOT, QUALITY, SPEED, CAPTIONS, SLEEP }
 
 /** Panel pengaturan pemutar: Kualitas, Kecepatan pemutaran, Teks (CC). */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -47,6 +47,7 @@ internal fun PlayerSettingsSheet(
     captionLabel: String, captionChoices: List<Choice>,
     loopOn: Boolean, onLoopChange: (Boolean) -> Unit,
     zoomFill: Boolean, onZoomChange: (Boolean) -> Unit,
+    sleepLabel: String, sleepChoices: List<Choice>,
     onDismiss: () -> Unit,
 ) {
     var page by remember { mutableStateOf(SettingsPage.ROOT) }
@@ -56,6 +57,7 @@ internal fun PlayerSettingsSheet(
                 if (qualityChoices.isNotEmpty()) SettingRow(Icons.Default.Tune, "Kualitas", qualityLabel) { page = SettingsPage.QUALITY }
                 SettingRow(Icons.Default.Speed, "Kecepatan pemutaran", speedLabel) { page = SettingsPage.SPEED }
                 if (captionChoices.isNotEmpty()) SettingRow(Icons.Default.ClosedCaption, "Teks (CC)", captionLabel) { page = SettingsPage.CAPTIONS }
+                SettingRow(Icons.Default.Bedtime, "Timer tidur", sleepLabel) { page = SettingsPage.SLEEP }
                 SettingSwitchRow(Icons.Default.Repeat, "Ulangi video", loopOn, onLoopChange)
                 SettingSwitchRow(Icons.Default.AspectRatio, "Isi layar (potong tepi)", zoomFill, onZoomChange)
             }
@@ -63,6 +65,7 @@ internal fun PlayerSettingsSheet(
                 val (title, choices) = when (page) {
                     SettingsPage.QUALITY -> "Kualitas" to qualityChoices
                     SettingsPage.SPEED -> "Kecepatan pemutaran" to speedChoices
+                    SettingsPage.SLEEP -> "Timer tidur" to sleepChoices
                     else -> "Teks (CC)" to captionChoices
                 }
                 ListItem(

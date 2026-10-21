@@ -1,5 +1,6 @@
 package com.app.youtubego.presentation.navigation
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -28,6 +29,8 @@ import com.app.youtubego.presentation.library.PlaylistDetailScreen
 import com.app.youtubego.presentation.library.PlaylistsScreen
 import com.app.youtubego.presentation.library.WatchLaterScreen
 import com.app.youtubego.presentation.player.OfflinePlayerScreen
+import com.app.youtubego.presentation.player.MiniPlayerBar
+import com.app.youtubego.presentation.player.PlaybackHost
 import com.app.youtubego.presentation.player.PlayerScreen
 import com.app.youtubego.presentation.search.SearchScreen
 import com.app.youtubego.presentation.settings.SettingsScreen
@@ -64,11 +67,18 @@ fun YoutubeGoNavHost() {
     val openPlayer: (String) -> Unit = { nav.navigate("player/$it") }
     val openChannel: (String) -> Unit = { if (it.isNotBlank()) nav.navigate("channel/$it") }
     val back: () -> Unit = { nav.popBackStack() }
+    val route = dest?.route.orEmpty()
+    val onPlayerRoute = route.startsWith("player/")
+    // Shorts & pemutar offline punya pemutar sendiri: pemutar utama dijeda agar tidak bersuara ganda.
+    val pauseMain = route == Routes.SHORTS || route.startsWith("offline/")
+    PlaybackHost(pauseMain, openPlayer)
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
+            Column {
+            if (!onPlayerRoute && !pauseMain) MiniPlayerBar(onOpen = openPlayer)
             if (showBar) NavigationBar(containerColor = YgSurface) {
                 tabs.forEach { tab ->
                     val selected = dest?.hierarchy?.any { it.route == tab.route } == true
@@ -89,6 +99,7 @@ fun YoutubeGoNavHost() {
                         ),
                     )
                 }
+            }
             }
         },
     ) { pad ->

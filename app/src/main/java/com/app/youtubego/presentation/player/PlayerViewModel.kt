@@ -91,7 +91,9 @@ class PlayerViewModel @Inject constructor(
         job = getDetail(videoId).onEach { result ->
             if (result is UiState.Success) { recordWatchOnce(result.data.summary); library.addHistory(result.data.summary) }
             val dev = _device.value
-            _state.value = if (result is UiState.Error && dev != null) UiState.Success(fallbackDetail(dev)).also { loadRelatedFallback(dev) } else result
+            _state.value = if (result is UiState.Error && dev != null) UiState.Success(fallbackDetail(dev)).also { loadRelatedFallback(dev.summary) } else result
+            // Detail sukses tapi YouTube tak memberi video terkait: isi lewat pencarian berdasarkan judul.
+            if (result is UiState.Success && result.data.recommendations.isEmpty()) loadRelatedFallback(result.data.summary)
         }.launchIn(viewModelScope)
         deviceJob = viewModelScope.launch {
             val resolved = deviceSource.resolve(videoId, force = forceFresh).getOrNull()
@@ -102,13 +104,13 @@ class PlayerViewModel @Inject constructor(
             // Detail API terlanjur galat duluan, tetapi perangkat membawa data: tampilkan detail cadangan.
             if (resolved != null && _state.value is UiState.Error) {
                 _state.value = UiState.Success(fallbackDetail(resolved))
-                loadRelatedFallback(resolved)
+                loadRelatedFallback(resolved.summary)
             }
         }
     }
     /** Rekomendasi cadangan: pencarian berdasarkan judul (terbaik-upaya; kosong bila API juga tak terjangkau). */
-    private fun loadRelatedFallback(d: DevicePlayback) {
-        val query = d.summary.title.take(60).ifBlank { return }
+    private fun loadRelatedFallback(s: VideoSummary) {
+        val query = s.title.take(60).ifBlank { return }
         relatedJob?.cancel()
         relatedJob = viewModelScope.launch {
             val related = repo.search(query).getOrNull().orEmpty().filter { it.id != videoId }.take(15)

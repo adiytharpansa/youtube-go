@@ -1,6 +1,8 @@
 package com.app.youtubego.data.newpipe
 
 import android.util.Log
+import com.app.youtubego.domain.model.Chapter
+import com.app.youtubego.domain.model.Storyboard
 import com.app.youtubego.domain.model.StreamOption
 import com.app.youtubego.domain.model.VideoSummary
 import kotlinx.coroutines.CoroutineDispatcher
@@ -29,6 +31,8 @@ data class DevicePlayback(
     val hlsUrl: String?,
     val likeCount: Long = 0L,
     val subscriberCount: Long = 0L,
+    val storyboard: Storyboard? = null,
+    val chapters: List<Chapter> = emptyList(),
 )
 
 /**
@@ -83,6 +87,15 @@ class DeviceStreamSource @Inject constructor(
                 hlsUrl = runCatching { extractor.hlsUrl }.getOrNull()?.takeIf { it.isNotBlank() },
                 likeCount = runCatching { extractor.likeCount }.getOrDefault(0L).coerceAtLeast(0L),
                 subscriberCount = runCatching { extractor.uploaderSubscriberCount }.getOrDefault(0L).coerceAtLeast(0L),
+                // Pratinjau seekbar & bab: terbaik-upaya, gagal = fitur sekadar tidak tampil (tidak boleh menggagalkan putar).
+                storyboard = runCatching {
+                    extractor.frames.filter { it.urls.isNotEmpty() && it.frameWidth > 0 && it.totalCount > 0 && it.durationPerFrame > 0 }
+                        .minByOrNull { kotlin.math.abs(it.frameWidth - 160) }
+                        ?.let { Storyboard(it.urls, it.frameWidth, it.frameHeight, it.totalCount, it.durationPerFrame, it.framesPerPageX, it.framesPerPageY) }
+                }.getOrNull(),
+                chapters = runCatching {
+                    extractor.streamSegments.map { Chapter(it.title ?: "", it.startTimeSeconds * 1000L) }.sortedBy { it.startMs }
+                }.getOrDefault(emptyList()),
             ).also { cache[videoId] = Cached(System.currentTimeMillis(), it) }
         }.onSuccess { Log.d(TAG, "ekstraksi $videoId OK: gabungan=${it.combined.size} dash=${it.dashUrl != null} hls=${it.hlsUrl != null}") }.onFailure { Log.w(TAG, "ekstraksi $videoId GAGAL: ${it.javaClass.simpleName}: ${it.message}"); if (it is kotlinx.coroutines.CancellationException) throw it }
     }

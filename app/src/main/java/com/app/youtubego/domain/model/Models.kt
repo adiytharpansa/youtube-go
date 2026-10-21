@@ -5,6 +5,13 @@ data class VideoSummary(
     val authorAvatarUrl: String, val thumbnailUrl: String,
     val lengthSeconds: Long, val viewCount: Long, val published: Long, val isLive: Boolean,
 )
+/** Sprite pratinjau seekbar (storyboard YouTube): tiap gambar berisi [perX] x [perY] bingkai berukuran [frameW] x [frameH]. */
+data class Storyboard(
+    val urls: List<String>, val frameW: Int, val frameH: Int, val total: Int,
+    val durationPerFrameMs: Int, val perX: Int, val perY: Int,
+)
+/** Bab video (penanda waktu di deskripsi). */
+data class Chapter(val title: String, val startMs: Long)
 data class StreamOption(val url: String, val qualityLabel: String, val mimeType: String)
 data class CaptionTrack(val label: String, val languageCode: String, val url: String)
 data class VideoDetail(

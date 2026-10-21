@@ -2,6 +2,9 @@ package com.app.youtubego.playback
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -9,11 +12,19 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -36,13 +47,37 @@ class PlayerHolder @Inject constructor(@ApplicationContext private val context: 
     /** Posisi terakhir per mediaId, agar kembali ke video yang sama melanjutkan, bukan dari nol. */
     private val positions = HashMap<String, Long>()
 
+    /** true = layar pemutar ditutup untuk DIKECILKAN (mini player), bukan dihentikan. Dibaca & direset layar pemutar saat keluar. */
+    @Volatile var minimizeOnLeave = false
+
+    /** Video berikutnya (rekomendasi pertama) yang diisi layar pemutar; dipakai tombol "Berikutnya" di notifikasi/layar kunci. */
+    @Volatile var upNextId: String? = null
+    private val _skipNext = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    /** Emisi id video saat pengguna menekan "Berikutnya" dari notifikasi; navigasi aplikasi yang membukanya. */
+    val skipNext: SharedFlow<String> = _skipNext.asSharedFlow()
+    fun requestNext() { upNextId?.let { _skipNext.tryEmit(it) } }
+
+    // ---- Timer tidur: jeda otomatis setelah N menit (hidup di holder agar tidak hilang saat pindah video) ----
+    private val handler = Handler(Looper.getMainLooper())
+    private val _sleepEndsAt = MutableStateFlow<Long?>(null)
+    val sleepEndsAt: StateFlow<Long?> = _sleepEndsAt.asStateFlow()
+    private val sleepRunnable = Runnable { player.pause(); _sleepEndsAt.value = null }
+    fun setSleepTimer(minutes: Int?) {
+        handler.removeCallbacks(sleepRunnable)
+        if (minutes == null) { _sleepEndsAt.value = null; return }
+        val ms = minutes * 60_000L
+        _sleepEndsAt.value = System.currentTimeMillis() + ms
+        handler.postDelayed(sleepRunnable, ms)
+    }
+
     private fun create(): ExoPlayer {
+        // Catatan: User-Agent TIDAK diatur di pabrik ini (di Media3 nilai itu menimpa header per-permintaan);
+        // diatur per permintaan lewat ResolvingDataSource di bawah, mengikuti klien YouTube pembuat URL (param c=).
         val http = DefaultHttpDataSource.Factory()
-            .setUserAgent(UA)
             .setConnectTimeoutMs(15_000)
             .setReadTimeoutMs(20_000)
             .setAllowCrossProtocolRedirects(true)
-        val dataSource = DefaultDataSource.Factory(context, http)
+        val dataSource = ResolvingDataSource.Factory(DefaultDataSource.Factory(context, http)) { spec -> withClientHeaders(spec) }
         // Buffer lebih lapang dari bawaan untuk jaringan seluler yang naik-turun; mulai putar cepat (1,5 dtk),
         // setelah buffering ulang tunggu 4 dtk agar tidak "buffer-putar-buffer" berulang.
         val loadControl = DefaultLoadControl.Builder()
@@ -61,6 +96,40 @@ class PlayerHolder @Inject constructor(@ApplicationContext private val context: 
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
             .also { it.trackSelectionParameters = defaultSelection(it, videoEnabled = true) }
+    }
+
+    /**
+     * URL googlevideo terikat ke klien YouTube yang membuatnya (c=ANDROID / IOS / WEB ...). Server menolak (403/5xx)
+     * bila User-Agent tidak cocok dengan klien itu, jadi setiap permintaan memakai UA yang sesuai.
+     */
+    private fun withClientHeaders(spec: DataSpec): DataSpec {
+        val uri = spec.uri
+        val host = uri.host.orEmpty()
+        val client = uri.getQueryParameter("c")
+        val ua = when (client) {
+            "ANDROID" -> ytUserAgent("getAndroidUserAgent") ?: UA
+            "IOS" -> ytUserAgent("getIosUserAgent") ?: UA
+            else -> UA
+        }
+        val headers = HashMap(spec.httpRequestHeaders)
+        headers["User-Agent"] = ua
+        if (host.endsWith("googlevideo.com") && (client == null || client.startsWith("WEB") || client.startsWith("MWEB"))) {
+            headers["Origin"] = "https://www.youtube.com"
+            headers["Referer"] = "https://www.youtube.com/"
+        }
+        return spec.buildUpon().setHttpRequestHeaders(headers).build()
+    }
+
+    private val uaCache = HashMap<String, String?>()
+    /** UA resmi klien dari NewPipeExtractor (lewat refleksi supaya build tak patah bila nama berubah antar-versi). */
+    private fun ytUserAgent(method: String): String? = synchronized(uaCache) {
+        uaCache.getOrPut(method) {
+            runCatching {
+                val c = Class.forName("org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper")
+                val loc = Class.forName("org.schabi.newpipe.extractor.localization.Localization")
+                c.getMethod(method, loc).invoke(null, null) as? String
+            }.getOrNull()?.takeIf { it.isNotBlank() }
+        }
     }
 
     private fun defaultSelection(p: Player, videoEnabled: Boolean): TrackSelectionParameters =
@@ -101,6 +170,7 @@ class PlayerHolder @Inject constructor(@ApplicationContext private val context: 
     fun stopIfCurrent(mediaId: String) {
         val p = player
         if (p.currentMediaItem?.mediaId != mediaId) return
+        upNextId = null
         if (p.playbackState != Player.STATE_ENDED && p.currentPosition > 3_000) positions[mediaId] = p.currentPosition
         p.stop()
         p.clearMediaItems()   // PlaybackService berhenti sendiri saat daftar kosong.
