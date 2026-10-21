@@ -2,6 +2,7 @@ package com.app.youtubego.data.newpipe
 
 import com.app.youtubego.domain.model.CaptionTrack
 import com.app.youtubego.domain.model.ChannelInfo
+import com.app.youtubego.domain.model.ChannelResult
 import com.app.youtubego.domain.model.CommentItem
 import com.app.youtubego.domain.model.StreamOption
 import com.app.youtubego.domain.model.TopicCatalog
@@ -19,6 +20,7 @@ import org.schabi.newpipe.extractor.ListExtractor
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.Page
 import org.schabi.newpipe.extractor.ServiceList
+import org.schabi.newpipe.extractor.channel.ChannelInfoItem
 import org.schabi.newpipe.extractor.comments.CommentsInfoItem
 import org.schabi.newpipe.extractor.localization.ContentCountry
 import org.schabi.newpipe.extractor.localization.Localization
@@ -94,6 +96,16 @@ class NewPipeVideoRepository @Inject constructor(
     private fun List<InfoItem>.summaries(): List<VideoSummary> =
         filterIsInstance<StreamInfoItem>().map { it.toSummary() }.filter { it.id.isNotBlank() }
 
+    private fun List<InfoItem>.channelResults(): List<ChannelResult> =
+        filterIsInstance<ChannelInfoItem>().map {
+            ChannelResult(
+                id = channelKeyFromUrl(it.url ?: ""),
+                name = it.name ?: "",
+                avatarUrl = it.thumbnails.maxByOrNull { img -> img.height }?.url ?: "",
+                subscriberText = subscriberText(it.subscriberCount),
+            )
+        }.filter { it.id.isNotBlank() && it.name.isNotBlank() }
+
     private fun formatCountId(n: Long): String {
         fun f(v: Double, unit: String) =
             String.format(Locale("id", "ID"), "%.1f", v).removeSuffix(",0") + " $unit"
@@ -116,6 +128,8 @@ class NewPipeVideoRepository @Inject constructor(
         private var nextPage: Page? = null
         private var started = false
         private var exhausted = false
+        /** Channel yang muncul di halaman pertama hasil (YouTube menyisipkannya di antara video). */
+        @Volatile var channels: List<ChannelResult> = emptyList()
 
         @Synchronized
         fun page(n: Int): List<VideoSummary> {
@@ -125,6 +139,7 @@ class NewPipeVideoRepository @Inject constructor(
                 if (!started) { ex.fetchPage(); started = true }
                 val result: ListExtractor.InfoItemsPage<InfoItem> =
                     if (nextPage == null && pages.isEmpty()) ex.initialPage else ex.getPage(nextPage)
+                if (pages.isEmpty()) channels = result.items.channelResults()
                 pages += result.items.summaries()
                 nextPage = if (result.hasNextPage()) result.nextPage else null
                 if (nextPage == null) exhausted = true
@@ -197,6 +212,13 @@ class NewPipeVideoRepository @Inject constructor(
 
     override suspend fun search(query: String, page: Int, shortsOnly: Boolean): Result<List<VideoSummary>> = runIo {
         searchItems(query, page, shortsOnly)
+    }
+
+    override suspend fun searchChannels(query: String): Result<List<ChannelResult>> = runIo {
+        if (sessions.size > 24) sessions.clear()
+        val session = sessions.computeIfAbsent("$query|0") { SearchSession(query) }
+        session.page(1)
+        session.channels
     }
 
     override suspend fun suggestions(query: String): Result<List<String>> = runIo {

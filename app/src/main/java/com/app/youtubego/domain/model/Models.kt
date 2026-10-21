@@ -28,3 +28,6 @@ data class ChannelInfo(val id: String, val name: String, val avatarUrl: String, 
 
 /** Playlist buatan pengguna, tersimpan lokal di perangkat. [videoIds] urut dari yang terbaru ditambahkan. */
 data class Playlist(val id: String, val name: String, val videoIds: List<String> = emptyList())
+
+/** Hasil channel pada pencarian. [id] berupa UC... atau @handle (sama dengan yang dipakai ChannelScreen). */
+data class ChannelResult(val id: String, val name: String, val avatarUrl: String, val subscriberText: String)
