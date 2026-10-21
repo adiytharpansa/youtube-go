@@ -1,0 +1,17 @@
+# Baseline profile tulisan tangan (wildcard): mengompilasi lebih awal jalur startup & scroll agar tidak patah-patah.
+# Untuk hasil paling akurat, hasilkan lewat modul Macrobenchmark (BaselineProfileRule) dan timpa berkas ini.
+HSPLcom/app/youtubego/**;->**(**)**
+HSPLandroidx/compose/runtime/**;->**(**)**
+HSPLandroidx/compose/ui/**;->**(**)**
+HSPLandroidx/compose/foundation/**;->**(**)**
+HSPLandroidx/compose/material3/**;->**(**)**
+HSPLandroidx/compose/animation/**;->**(**)**
+HSPLandroidx/lifecycle/**;->**(**)**
+HSPLandroidx/navigation/**;->**(**)**
+HSPLandroidx/activity/**;->**(**)**
+HSPLcoil/**;->**(**)**
+Landroidx/compose/runtime/**;
+Landroidx/compose/ui/**;
+Landroidx/compose/foundation/**;
+Landroidx/compose/material3/**;
+Lcom/app/youtubego/**;
