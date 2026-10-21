@@ -10,6 +10,12 @@ Rincian lengkap ada di [BLUEPRINT.md](BLUEPRINT.md).
 ## Build debug (di GitHub Actions, tanpa PC)
 Actions → **Build Debug APK** → Run workflow → unduh artefak `youtube-go-debug`.
 
+## Baru di v1.44 - putar di latar belakang & streaming lebih lancar
+- **Putar di latar belakang**: suara lanjut saat layar mati / ke Beranda, kontrol di notifikasi & layar kunci (Media3 `MediaSessionService`, foreground service `mediaPlayback`). Bisa dimatikan di Pengaturan.
+- Pemutar tunggal bersama (`playback/PlayerHolder`), tidak lagi dibuat-buang per layar; trek video dimatikan otomatis di latar belakang (hemat kuota & baterai).
+- Mulai putar tidak lagi menunggu server proksi; tidak restart dari 0 saat detail API tiba; otomatis ambil URL segar bila stream putus/403 dan lanjut dari posisi terakhir.
+- Shorts: pra-ekstrak 2 Short berikutnya, fokus audio, tidak menyala sendiri setelah dijeda.
+
 ## Halaman & fitur (v1.43)
 - **Beranda**: gabungan beberapa sumber per kategori + scroll tak terbatas (halaman lanjutan, deduplikasi, footer "Coba lagi"/"Sudah semua"). Tidak ada video yang dibuang dari feed "Untuk Anda" (yang sudah ditonton dipindah ke belakang).
 - **Shorts**: pemutar vertikal (geser atas/bawah), suka/simpan/ikuti/bagikan, halaman tak terbatas.

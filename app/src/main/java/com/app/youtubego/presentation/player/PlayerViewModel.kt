@@ -11,6 +11,9 @@ import com.app.youtubego.domain.model.Playlist
 import com.app.youtubego.domain.model.VideoDetail
 import com.app.youtubego.domain.model.VideoSummary
 import com.app.youtubego.domain.repository.InterestRepository
+import com.app.youtubego.domain.repository.VideoRepository
+import com.app.youtubego.playback.PlayerHolder
+import com.app.youtubego.presentation.common.formatViewsId
 import com.app.youtubego.domain.usecase.GetCommentsUseCase
 import com.app.youtubego.domain.usecase.GetVideoDetailUseCase
 import com.app.youtubego.presentation.common.UiState
@@ -32,6 +35,8 @@ class PlayerViewModel @Inject constructor(
     private val interests: InterestRepository,
     private val library: UserLibraryStore,
     private val downloads: DownloadStore,
+    private val repo: VideoRepository,
+    val holder: PlayerHolder,
 ) : ViewModel() {
     private val videoId: String = checkNotNull(savedState["videoId"])
     private val _state = MutableStateFlow<UiState<VideoDetail>>(UiState.Loading)
@@ -49,11 +54,15 @@ class PlayerViewModel @Inject constructor(
     val subscribed: StateFlow<Set<String>> = library.subscribed
     val autoplay: StateFlow<Boolean> = library.autoplay
     val highQuality: StateFlow<Boolean> = library.highQuality
+    val backgroundPlay: StateFlow<Boolean> = library.backgroundPlay
     val playlists: StateFlow<List<Playlist>> = library.playlists
     val downloadItems = downloads.items
     private var job: Job? = null
     private var deviceJob: Job? = null
     private var commentsJob: Job? = null
+    private var relatedJob: Job? = null
+    /** Retry pertama dan seterusnya melewati cache ekstraksi: URL lama bisa kedaluwarsa. */
+    private var forceFresh = false
     private var watchRecorded = false
     /** Catat sinyal minat sekali per video: judul -> topik, channel -> afinitas. */
     private fun recordWatchOnce(v: VideoSummary) { if (!watchRecorded) { watchRecorded = true; interests.recordWatch(v) } }
@@ -63,7 +72,7 @@ class PlayerViewModel @Inject constructor(
         (_state.value as? UiState.Success)?.data?.summary ?: _device.value?.summary
     init { load() }
     /** Muat ulang dari awal (URL putar kedaluwarsa, jadi retry WAJIB mengambil data segar dari kedua jalur, bukan memutar ulang URL lama). */
-    fun retry() { load() }
+    fun retry() { forceFresh = true; load() }
     fun toggleLike() { val v = currentSummary(); if (v != null) library.toggleLiked(v) else library.toggleLiked(videoId) }
     fun toggleSave() { val v = currentSummary(); if (v != null) library.toggleSaved(v) else library.toggleSaved(videoId) }
     fun download() { currentSummary()?.let { downloads.start(it) } }
@@ -75,31 +84,48 @@ class PlayerViewModel @Inject constructor(
         job?.cancel()
         deviceJob?.cancel()
         commentsJob?.cancel()
+        relatedJob?.cancel()
         _device.value = null
         _deviceSettled.value = false
         commentsJob = getComments(videoId).onEach { _comments.value = it }.launchIn(viewModelScope)
         job = getDetail(videoId).onEach { result ->
             if (result is UiState.Success) { recordWatchOnce(result.data.summary); library.addHistory(result.data.summary) }
             val dev = _device.value
-            _state.value = if (result is UiState.Error && dev != null) UiState.Success(fallbackDetail(dev)) else result
+            _state.value = if (result is UiState.Error && dev != null) UiState.Success(fallbackDetail(dev)).also { loadRelatedFallback(dev) } else result
         }.launchIn(viewModelScope)
         deviceJob = viewModelScope.launch {
-            val resolved = deviceSource.resolve(videoId).getOrNull()
+            val resolved = deviceSource.resolve(videoId, force = forceFresh).getOrNull()
+            forceFresh = false
             _device.value = resolved
             resolved?.let { recordWatchOnce(it.summary); if (_state.value !is UiState.Success) library.addHistory(it.summary) }
             _deviceSettled.value = true
             // Detail API terlanjur galat duluan, tetapi perangkat membawa data: tampilkan detail cadangan.
             if (resolved != null && _state.value is UiState.Error) {
                 _state.value = UiState.Success(fallbackDetail(resolved))
+                loadRelatedFallback(resolved)
             }
         }
     }
-    /** Detail cadangan dari metadata perangkat (tanpa rekomendasi/takarir) bila API utama tidak terjangkau. */
+    /** Rekomendasi cadangan: pencarian berdasarkan judul (terbaik-upaya; kosong bila API juga tak terjangkau). */
+    private fun loadRelatedFallback(d: DevicePlayback) {
+        val query = d.summary.title.take(60).ifBlank { return }
+        relatedJob?.cancel()
+        relatedJob = viewModelScope.launch {
+            val related = repo.search(query).getOrNull().orEmpty().filter { it.id != videoId }.take(15)
+            if (related.isEmpty()) return@launch
+            (_state.value as? UiState.Success)?.let { cur ->
+                // Hanya isi bila detail yang tampil memang detail cadangan (tanpa rekomendasi).
+                if (cur.data.recommendations.isEmpty()) _state.value = UiState.Success(cur.data.copy(recommendations = related))
+            }
+        }
+    }
+
+    /** Detail cadangan dari metadata perangkat (tanpa takarir) bila API utama tidak terjangkau. */
     private fun fallbackDetail(d: DevicePlayback): VideoDetail = VideoDetail(
         summary = d.summary,
         description = d.description,
-        likeCount = 0L,
-        subscriberText = "",
+        likeCount = d.likeCount,
+        subscriberText = if (d.subscriberCount > 0) "${formatViewsId(d.subscriberCount)} subscriber" else "",
         combinedStreams = emptyList(),
         dashUrl = null,
         hlsUrl = null,

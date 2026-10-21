@@ -45,17 +45,15 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.media3.common.AudioAttributes
+import androidx.lifecycle.Lifecycle.State as LifecycleState
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.app.youtubego.domain.model.CaptionTrack
@@ -69,7 +67,10 @@ import com.app.youtubego.presentation.library.VideoItem
 import com.app.youtubego.data.local.DownloadStatus
 import com.app.youtubego.presentation.theme.YgMuted
 import com.app.youtubego.presentation.theme.YgSurfaceVariant
+import com.app.youtubego.playback.BackgroundPlaybackEffect
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 private enum class PlayerSheet { SETTINGS, COMMENTS, DESCRIPTION }
 private val SPEEDS = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
@@ -96,12 +97,12 @@ fun PlayerScreen(
     val subscribedIds by vm.subscribed.collectAsState()
     val autoplay by vm.autoplay.collectAsState()
     val highQuality by vm.highQuality.collectAsState()
+    val backgroundPlay by vm.backgroundPlay.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val downloadItems by vm.downloadItems.collectAsState()
     var playlistDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
-    val lifecycleOwner = LocalLifecycleOwner.current
     val orientation = LocalConfiguration.current.orientation
     var isFullscreen by rememberSaveable { mutableStateOf(false) }
     var inPip by remember { mutableStateOf(activity?.isInPictureInPictureMode == true) }
@@ -111,32 +112,24 @@ fun PlayerScreen(
     var selectedStreamUrl by remember(videoId) { mutableStateOf<String?>(null) }
     var captionIndex by remember(videoId) { mutableIntStateOf(-1) }
 
-    val player = remember(videoId) {
-        ExoPlayer.Builder(context)
-            .setAudioAttributes(AudioAttributes.DEFAULT, true)
-            .setHandleAudioBecomingNoisy(true)
-            .build().apply {
-                trackSelectionParameters = trackSelectionParameters.buildUpon()
-                    .setMaxVideoSize(1280, 720).setMaxAudioBitrate(128_000)
-                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
-            }
-    }
+    // Pemutar BERSAMA (singleton, dipegang PlaybackService): tidak dibuat/dibuang per layar, jadi pindah video
+    // tidak memutus koneksi & decoder, dan suara bisa lanjut di latar belakang.
+    val holder = vm.holder
+    val player = holder.player
     val snap = rememberPlayerSnapshot(player)
-
-    DisposableEffect(lifecycleOwner, player) {
-        val obs = LifecycleEventObserver { _, e ->
-            // Dalam mode PiP video tetap berjalan; selain itu jeda saat layar ditinggalkan.
-            if (e == Lifecycle.Event.ON_PAUSE && activity?.isInPictureInPictureMode != true) player.pause()
-        }
-        lifecycleOwner.lifecycle.addObserver(obs)
+    // ON_STOP (layar mati / ke Beranda): suara lanjut bila "Putar di latar belakang" aktif, selain itu jeda.
+    BackgroundPlaybackEffect(holder, backgroundPlay)
+    DisposableEffect(videoId) {
         onDispose {
-            lifecycleOwner.lifecycle.removeObserver(obs)
             // Pulihkan orientasi & system bars bila layar ditinggalkan saat fullscreen.
             activity?.let {
                 it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                 WindowCompat.getInsetsController(it.window, it.window.decorView).show(WindowInsetsCompat.Type.systemBars())
             }
-            player.release()
+            // Keluar dari layar ini (kembali/pindah) = hentikan. Activity DIHANCURKAN (mis. digeser dari recent)
+            // BUKAN keluar layar: biarkan service melanjutkan suara.
+            val destroyed = (activity as? ComponentActivity)?.lifecycle?.currentState == LifecycleState.DESTROYED
+            if (!destroyed) holder.stopIfCurrent(videoId)
         }
     }
     // Picture-in-Picture: otomatis saat pengguna meninggalkan aplikasi sambil memutar.
@@ -149,9 +142,23 @@ fun PlayerScreen(
         onDispose { a?.removeOnUserLeaveHintListener(leave); a?.removeOnPictureInPictureModeChangedListener(pipChanged) }
     }
     var playerError by remember(videoId) { mutableStateOf<String?>(null) }
-    DisposableEffect(player) {
+    var autoRetries by remember(videoId) { mutableIntStateOf(0) }
+    DisposableEffect(player, videoId) {
         val l = object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) autoRetries = 0
+            }
             override fun onPlayerError(error: PlaybackException) {
+                // Jaringan putus / URL kedaluwarsa (HTTP 403): ambil URL SEGAR otomatis (maks. 2x) dan lanjut
+                // dari posisi terakhir, alih-alih langsung menampilkan galat.
+                val recoverable = error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ||
+                    error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+                    error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+                if (recoverable && autoRetries < 2 && player.currentMediaItem?.mediaId == videoId) {
+                    autoRetries++
+                    vm.retry()
+                    return
+                }
                 playerError = when (error.errorCode) {
                     PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ->
                         "Aliran video gagal diambil dari server (galat HTTP). Server video mungkin sedang bermasalah — coba lagi sebentar."
@@ -196,28 +203,56 @@ fun PlayerScreen(
         }
     }
 
-    // Siapkan media SEKALI per set URL segar (di luar cabang UI agar rotasi/layar penuh tidak mengulang putaran),
-    // menunggu ekstraksi perangkat selesai lebih dulu. Urutan: DASH perangkat (adaptif), stream gabungan perangkat,
-    // HLS perangkat, lalu cadangan server: gabungan, DASH, HLS. Takarir dari API ikut dipasang.
-    LaunchedEffect(deviceSettled, detail != null, state is UiState.Loading, device?.dashUrl, device?.combined?.firstOrNull()?.url, device?.hlsUrl, detail?.combinedStreams?.firstOrNull()?.url, detail?.dashUrl, detail?.hlsUrl, highQuality) {
-        val d = detail
-        if (!deviceSettled || state is UiState.Loading) return@LaunchedEffect
-        val devDash = device?.dashUrl
-        val devCombined = (if (highQuality) device?.combined?.lastOrNull() else device?.combined?.firstOrNull())?.url
-        val devHls = device?.hlsUrl
+    // Siapkan media per URL segar (di luar cabang UI agar rotasi/layar penuh tidak mengulang putaran).
+    // Mulai SEGERA begitu ekstraksi perangkat punya stream; detail API hanya ditunggu paling lama 1,2 dtk
+    // (untuk takarir) -- tidak lagi memblokir putar sampai server proksi menjawab. Urutan sumber: DASH perangkat,
+    // stream gabungan perangkat, HLS perangkat, lalu cadangan server: gabungan, DASH, HLS.
+    // Hanya memuat ulang bila URL BERUBAH, dan membawa posisi terakhir: tidak ada lagi "restart dari 0"
+    // saat detail API datang belakangan atau pengaturan kualitas berubah.
+    var loadedKey by remember(videoId) { mutableStateOf<String?>(null) }
+    LaunchedEffect(deviceSettled, device, highQuality, state is UiState.Loading, detail?.combinedStreams?.firstOrNull()?.url, detail?.dashUrl, detail?.hlsUrl) {
+        if (!deviceSettled) return@LaunchedEffect
+        if (selectedStreamUrl != null) return@LaunchedEffect // pengguna memilih kualitas manual: jangan ditimpa
+        val dev = device
+        val devHasStream = dev != null && (!dev.dashUrl.isNullOrBlank() || dev.combined.isNotEmpty() || !dev.hlsUrl.isNullOrBlank())
+        if (!devHasStream && state is UiState.Loading) return@LaunchedEffect // tunggu API; efek diulang saat detail tiba
+        if (devHasStream && state is UiState.Loading) {
+            withTimeoutOrNull(1200) { snapshotFlow { state is UiState.Loading }.first { !it } }
+        }
+        val d = (state as? UiState.Success)?.data
+        val devDash = dev?.dashUrl
+        val devCombined = (if (highQuality) dev?.combined?.lastOrNull() else dev?.combined?.firstOrNull())?.url
+        val devHls = dev?.hlsUrl
         val combined = (if (highQuality) d?.combinedStreams?.lastOrNull() else d?.combinedStreams?.firstOrNull())?.url
         val subs = d?.captions.orEmpty().filter { it.url.isNotBlank() }
-        val item: MediaItem? = when {
-            !devDash.isNullOrBlank() -> { adaptive = true; buildItem(devDash, MimeTypes.APPLICATION_MPD, subs) }
-            !devCombined.isNullOrBlank() -> { adaptive = false; buildItem(devCombined, null, subs) }
-            !devHls.isNullOrBlank() -> { adaptive = true; buildItem(devHls, MimeTypes.APPLICATION_M3U8, subs) }
-            !combined.isNullOrBlank() -> { adaptive = false; buildItem(combined, null, subs) }
-            !d?.dashUrl.isNullOrBlank() -> { adaptive = true; buildItem(d!!.dashUrl!!, MimeTypes.APPLICATION_MPD, subs) }
-            !d?.hlsUrl.isNullOrBlank() -> { adaptive = true; buildItem(d!!.hlsUrl!!, MimeTypes.APPLICATION_M3U8, subs) }
-            else -> null
+        val summary = d?.summary ?: dev?.summary
+        val (uri, mime, isAdaptive) = when {
+            !devDash.isNullOrBlank() -> Triple(devDash, MimeTypes.APPLICATION_MPD, true)
+            !devCombined.isNullOrBlank() -> Triple(devCombined, null, false)
+            !devHls.isNullOrBlank() -> Triple(devHls, MimeTypes.APPLICATION_M3U8, true)
+            !combined.isNullOrBlank() -> Triple(combined, null, false)
+            !d?.dashUrl.isNullOrBlank() -> Triple(d!!.dashUrl!!, MimeTypes.APPLICATION_MPD, true)
+            !d?.hlsUrl.isNullOrBlank() -> Triple(d!!.hlsUrl!!, MimeTypes.APPLICATION_M3U8, true)
+            else -> Triple(null, null, false)
         }
-        if (item != null) { player.setMediaItem(item); player.prepare(); player.playWhenReady = true }
-        else if (state !is UiState.Error) playerError = "Format putar untuk video ini sedang tidak tersedia dari jalur mana pun. Coba lagi nanti atau pilih video lain."
+        if (uri == null) {
+            if (state !is UiState.Error) playerError = "Format putar untuk video ini sedang tidak tersedia dari jalur mana pun. Coba lagi nanti atau pilih video lain."
+            return@LaunchedEffect
+        }
+        if (loadedKey == uri) return@LaunchedEffect
+        adaptive = isAdaptive
+        playerError = null
+        val item = buildItem(videoId, uri, mime, subs, summary?.title, summary?.author, summary?.thumbnailUrl)
+        if (loadedKey == null && holder.isCurrent(videoId, uri)) { loadedKey = uri; return@LaunchedEffect }
+        val sameVideoReload = loadedKey != null
+        val started = (activity as? ComponentActivity)?.lifecycle?.currentState?.isAtLeast(LifecycleState.STARTED) != false
+        holder.play(
+            item,
+            startPositionMs = if (sameVideoReload) player.currentPosition.coerceAtLeast(0L) else null,
+            keepSettings = sameVideoReload,
+            videoEnabled = started,
+        )
+        loadedKey = uri
     }
 
     // ---- Pilihan kualitas, kecepatan, teks ----
@@ -245,7 +280,8 @@ fun PlayerScreen(
     fun applyStream(o: StreamOption) {
         selectedStreamUrl = o.url
         val pos = player.currentPosition
-        player.setMediaItem(buildItem(o.url, null, captions), pos); player.prepare(); player.playWhenReady = true
+        val sm = detail?.summary ?: device?.summary
+        holder.play(buildItem(videoId, o.url, null, captions, sm?.title, sm?.author, sm?.thumbnailUrl), startPositionMs = pos, keepSettings = true)
     }
     fun applyCaption(i: Int) {
         captionIndex = i
@@ -282,6 +318,8 @@ fun PlayerScreen(
                         layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                     }
                 },
+                // Pemutar kini berumur panjang: lepaskan PlayerView agar Activity tidak bocor lewat listener-nya.
+                onRelease = { it.player = null },
                 modifier = Modifier.fillMaxSize(),
             )
             if (!inPip) {
@@ -465,8 +503,16 @@ private fun CommentsTeaser(comments: UiState<List<CommentItem>>, onOpen: () -> U
 
 private fun speedText(s: Float): String = if (s == 1f) "Normal" else "${s}x".replace(".0x", "x")
 
-private fun buildItem(uri: String, mime: String?, subs: List<CaptionTrack>): MediaItem {
-    val b = MediaItem.Builder().setUri(uri)
+private fun buildItem(
+    videoId: String, uri: String, mime: String?, subs: List<CaptionTrack>,
+    title: String?, author: String?, thumb: String?,
+): MediaItem {
+    // mediaId = id video: dipakai PlayerHolder untuk tahu siapa pemilik pemutar; metadata tampil di notifikasi media.
+    val b = MediaItem.Builder().setMediaId(videoId).setUri(uri)
+        .setMediaMetadata(
+            MediaMetadata.Builder().setTitle(title).setArtist(author)
+                .apply { if (!thumb.isNullOrBlank()) setArtworkUri(Uri.parse(thumb)) }.build(),
+        )
     if (mime != null) b.setMimeType(mime)
     if (subs.isNotEmpty()) b.setSubtitleConfigurations(subs.map {
         MediaItem.SubtitleConfiguration.Builder(Uri.parse(it.url)).setMimeType(MimeTypes.TEXT_VTT)

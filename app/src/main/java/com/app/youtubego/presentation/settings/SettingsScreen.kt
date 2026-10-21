@@ -35,12 +35,14 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
     val autoplay = library.autoplay
     val highQuality = library.highQuality
+    val backgroundPlay = library.backgroundPlay
     val wifiOnlyDownloads = library.wifiOnlyDownloads
     val historyPaused = library.historyPaused
     val downloadItems = downloads.items
 
     fun setAutoplay(on: Boolean) = library.setAutoplay(on)
     fun setHighQuality(on: Boolean) = library.setHighQuality(on)
+    fun setBackgroundPlay(on: Boolean) = library.setBackgroundPlay(on)
     fun setWifiOnlyDownloads(on: Boolean) = library.setWifiOnlyDownloads(on)
     fun setHistoryPaused(on: Boolean) = library.setHistoryPaused(on)
     fun clearHistory() = library.clearHistory()
@@ -55,6 +57,7 @@ private enum class Confirm { HISTORY, INTERESTS, DOWNLOADS }
 fun SettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()) {
     val autoplay by vm.autoplay.collectAsState()
     val highQuality by vm.highQuality.collectAsState()
+    val backgroundPlay by vm.backgroundPlay.collectAsState()
     val wifiOnly by vm.wifiOnlyDownloads.collectAsState()
     val historyPaused by vm.historyPaused.collectAsState()
     val downloads by vm.downloadItems.collectAsState()
@@ -66,6 +69,7 @@ fun SettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()) 
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
             Section("Pemutaran")
             SwitchRow("Kualitas tinggi sebagai bawaan", "Mati = mulai dari kualitas terendah agar hemat data (360p). Bisa diganti per video di menu pemutar.", highQuality, vm::setHighQuality)
+            SwitchRow("Putar di latar belakang", "Suara tetap berjalan saat layar mati atau aplikasi ditutup ke Beranda, dengan kontrol di notifikasi.", backgroundPlay, vm::setBackgroundPlay)
             SwitchRow("Putar otomatis video berikutnya", "Memutar rekomendasi pertama setelah video selesai.", autoplay, vm::setAutoplay)
 
             Section("Hemat data & unduhan")

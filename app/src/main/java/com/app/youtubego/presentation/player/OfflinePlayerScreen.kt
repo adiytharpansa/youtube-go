@@ -18,22 +18,27 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.app.youtubego.data.local.DownloadStore
+import com.app.youtubego.data.local.UserLibraryStore
+import com.app.youtubego.playback.BackgroundPlaybackEffect
+import com.app.youtubego.playback.PlayerHolder
 import com.app.youtubego.domain.model.VideoSummary
 import com.app.youtubego.presentation.theme.YgMuted
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 
 @HiltViewModel
-class OfflinePlayerViewModel @Inject constructor(private val downloads: DownloadStore) : ViewModel() {
+class OfflinePlayerViewModel @Inject constructor(
+    private val downloads: DownloadStore,
+    library: UserLibraryStore,
+    val holder: PlayerHolder,
+) : ViewModel() {
+    val backgroundPlay = library.backgroundPlay
     fun fileUri(id: String): Uri? = downloads.fileFor(id).takeIf { it.exists() && downloads.isDone(id) }?.let { Uri.fromFile(it) }
     fun video(id: String): VideoSummary? = downloads.items.value.firstOrNull { it.video.id == id }?.video
 }
@@ -45,17 +50,20 @@ fun OfflinePlayerScreen(videoId: String, onBack: () -> Unit, vm: OfflinePlayerVi
     val context = LocalContext.current
     val uri = remember(videoId) { vm.fileUri(videoId) }
     val video = remember(videoId) { vm.video(videoId) }
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val exo = remember(videoId) {
-        ExoPlayer.Builder(context).build().apply {
-            if (uri != null) { setMediaItem(MediaItem.fromUri(uri)); prepare(); playWhenReady = true }
+    val holder = vm.holder
+    val backgroundPlay by vm.backgroundPlay.collectAsState()
+    val mediaId = "offline:$videoId"
+    // Pemutar bersama + service: unduhan juga bisa diputar di latar belakang. Berkas lokal: tanpa jaringan.
+    LaunchedEffect(uri) {
+        if (uri != null && !holder.isCurrent(mediaId, uri.toString())) {
+            holder.play(
+                MediaItem.Builder().setMediaId(mediaId).setUri(uri)
+                    .setMediaMetadata(MediaMetadata.Builder().setTitle(video?.title).setArtist(video?.author).build()).build(),
+            )
         }
     }
-    DisposableEffect(exo, lifecycleOwner) {
-        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_PAUSE) exo.pause() }
-        lifecycleOwner.lifecycle.addObserver(obs)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(obs); exo.release() }
-    }
+    BackgroundPlaybackEffect(holder, backgroundPlay)
+    DisposableEffect(mediaId) { onDispose { holder.stopIfCurrent(mediaId) } }
     Column(Modifier.fillMaxSize().background(Color.Black).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali", tint = Color.White) }
@@ -72,9 +80,10 @@ fun OfflinePlayerScreen(videoId: String, onBack: () -> Unit, vm: OfflinePlayerVi
                     PlayerView(ctx).apply {
                         layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                         useController = true
-                        this.player = exo
+                        this.player = holder.player
                     }
                 },
+                onRelease = { it.player = null },
             )
         }
     }

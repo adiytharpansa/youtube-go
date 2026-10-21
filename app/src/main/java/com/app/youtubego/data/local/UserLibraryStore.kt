@@ -44,6 +44,7 @@ class UserLibraryStore @Inject constructor(@ApplicationContext context: Context)
     private val _playlists = MutableStateFlow(readPlaylists())
     private val _autoplay = MutableStateFlow(prefs.getBoolean("autoplay", true))
     private val _highQuality = MutableStateFlow(prefs.getBoolean("high_quality", false))
+    private val _backgroundPlay = MutableStateFlow(prefs.getBoolean("background_play", true))
     private val _wifiOnlyDownloads = MutableStateFlow(prefs.getBoolean("wifi_only_downloads", true))
     private val _historyPaused = MutableStateFlow(prefs.getBoolean("history_paused", false))
 
@@ -58,6 +59,7 @@ class UserLibraryStore @Inject constructor(@ApplicationContext context: Context)
     val autoplay: StateFlow<Boolean> = _autoplay.asStateFlow()
     /** false = mulai dari kualitas terendah (hemat data, bawaan); true = mulai dari kualitas tertinggi yang tersedia. */
     val highQuality: StateFlow<Boolean> = _highQuality.asStateFlow()
+    val backgroundPlay: StateFlow<Boolean> = _backgroundPlay.asStateFlow()
     val wifiOnlyDownloads: StateFlow<Boolean> = _wifiOnlyDownloads.asStateFlow()
     val historyPaused: StateFlow<Boolean> = _historyPaused.asStateFlow()
 
@@ -128,6 +130,7 @@ class UserLibraryStore @Inject constructor(@ApplicationContext context: Context)
 
     // ---- Preferensi ----
     fun setAutoplay(on: Boolean) { _autoplay.value = on; prefs.edit().putBoolean("autoplay", on).apply() }
+    fun setBackgroundPlay(on: Boolean) { _backgroundPlay.value = on; prefs.edit().putBoolean("background_play", on).apply() }
     fun setHighQuality(on: Boolean) { _highQuality.value = on; prefs.edit().putBoolean("high_quality", on).apply() }
     fun setWifiOnlyDownloads(on: Boolean) { _wifiOnlyDownloads.value = on; prefs.edit().putBoolean("wifi_only_downloads", on).apply() }
     fun setHistoryPaused(on: Boolean) { _historyPaused.value = on; prefs.edit().putBoolean("history_paused", on).apply() }

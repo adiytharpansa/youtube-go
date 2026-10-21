@@ -129,6 +129,17 @@ class ShortsViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Pra-ekstrak Short berikutnya selagi yang sekarang diputar: hasilnya masuk cache DeviceStreamSource,
+     * jadi saat digeser, video langsung mulai (tanpa menunggu 1-3 dtk ekstraksi tiap geseran).
+     */
+    private val prefetched = HashSet<String>()
+    fun prefetch(videos: List<VideoSummary>) {
+        videos.forEach { v ->
+            if (prefetched.add(v.id)) viewModelScope.launch { withTimeoutOrNull(10_000) { deviceSource.resolve(v.id) } }
+        }
+    }
+
     /** URL stream gabungan untuk satu Short: jalur perangkat dulu, lalu API server. null = tak bisa diputar. */
     suspend fun resolveStream(id: String): String? {
         val dev = withTimeoutOrNull(10_000) { deviceSource.resolve(id).getOrNull()?.combined }.orEmpty()
@@ -163,6 +174,9 @@ fun ShortsScreen(onChannelClick: (String) -> Unit, vm: ShortsViewModel = hiltVie
             // Muat halaman berikutnya saat tersisa 3 video lagi.
             LaunchedEffect(pager.currentPage, state.videos.size) {
                 if (pager.currentPage >= state.videos.size - 3) vm.loadMore()
+            }
+            LaunchedEffect(pager.currentPage, state.videos.size) {
+                vm.prefetch(state.videos.drop(pager.currentPage + 1).take(2))
             }
             VerticalPager(state = pager, modifier = Modifier.fillMaxSize().background(Color.Black), beyondViewportPageCount = 0, key = { state.videos[it].id }) { i ->
                 val v = state.videos[i]
@@ -245,7 +259,11 @@ private fun ShortPlayer(video: VideoSummary, vm: ShortsViewModel) {
     var playing by remember(u) { mutableStateOf(true) }
     var progress by remember(u) { mutableFloatStateOf(0f) }
     val exo = remember(u) {
-        ExoPlayer.Builder(context).build().apply {
+        ExoPlayer.Builder(context)
+            // Fokus audio: Short mulai -> pemutar video utama/notifikasi dijeda otomatis (tak tumpang tindih).
+            .setAudioAttributes(androidx.media3.common.AudioAttributes.Builder().setUsage(androidx.media3.common.C.USAGE_MEDIA).setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
+            .setHandleAudioBecomingNoisy(true)
+            .build().apply {
             repeatMode = Player.REPEAT_MODE_ONE
             setMediaItem(MediaItem.fromUri(u)); prepare(); playWhenReady = true
         }
@@ -257,8 +275,11 @@ private fun ShortPlayer(video: VideoSummary, vm: ShortsViewModel) {
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) { failed = true }
         }
         exo.addListener(listener)
+        // Lanjut hanya bila tadinya memang berputar: Short yang sengaja dijeda tidak menyala sendiri.
+        var wasPlaying = false
         val obs = LifecycleEventObserver { _, e ->
-            if (e == Lifecycle.Event.ON_PAUSE) exo.pause() else if (e == Lifecycle.Event.ON_RESUME) exo.play()
+            if (e == Lifecycle.Event.ON_PAUSE) { wasPlaying = exo.playWhenReady; exo.pause() }
+            else if (e == Lifecycle.Event.ON_RESUME && wasPlaying) exo.play()
         }
         lifecycleOwner.lifecycle.addObserver(obs)
         onDispose { lifecycleOwner.lifecycle.removeObserver(obs); exo.removeListener(listener); exo.release() }
