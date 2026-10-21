@@ -7,6 +7,7 @@ import com.app.youtubego.data.local.DownloadStore
 import com.app.youtubego.data.local.UserLibraryStore
 import com.app.youtubego.domain.model.Playlist
 import com.app.youtubego.domain.model.VideoSummary
+import com.app.youtubego.playback.PlayerHolder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
@@ -20,6 +21,7 @@ import javax.inject.Inject
 class LibraryViewModel @Inject constructor(
     private val library: UserLibraryStore,
     private val downloads: DownloadStore,
+    private val holder: PlayerHolder,
 ) : ViewModel() {
     val saved: StateFlow<Set<String>> = library.saved
     val liked: StateFlow<Set<String>> = library.liked
@@ -39,6 +41,8 @@ class LibraryViewModel @Inject constructor(
             lists.firstOrNull { it.id == id }?.videoIds.orEmpty().mapNotNull { meta[it] }
         }
 
+    /** true = ditambahkan; false = sudah di antrean / sedang diputar. */
+    fun enqueue(video: VideoSummary): Boolean { library.remember(video); return holder.enqueue(video) }
     fun toggleSaved(video: VideoSummary) = library.toggleSaved(video)
     fun toggleLiked(video: VideoSummary) = library.toggleLiked(video)
     fun removeHistory(id: String) = library.removeHistory(id)

@@ -5,6 +5,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.text.ClickableText
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import com.app.youtubego.domain.model.Chapter
+import com.app.youtubego.presentation.common.formatDuration
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -31,9 +38,14 @@ import com.app.youtubego.presentation.theme.YgSurface
 import com.app.youtubego.presentation.theme.YgSurfaceVariant
 
 /** Bersihkan sisa HTML dari API (mis. &nbsp;, <br>, <a>) agar komentar/deskripsi tampil sebagai teks biasa. */
-internal fun cleanHtml(s: String): String =
-    if (s.indexOf('<') < 0 && s.indexOf('&') < 0) s
-    else androidx.core.text.HtmlCompat.fromHtml(s, androidx.core.text.HtmlCompat.FROM_HTML_MODE_COMPACT).toString().trim()
+internal fun cleanHtml(s: String): String {
+    if (s.indexOf('<') < 0 && s.indexOf('&') < 0) return s
+    fun decode(x: String) = androidx.core.text.HtmlCompat.fromHtml(x, androidx.core.text.HtmlCompat.FROM_HTML_MODE_COMPACT).toString()
+    var out = decode(s)
+    // Sumber komentar kadang ter-escape dua kali ("&amp;nbsp;"): sisa entitas tampil literal, jadi urai sekali lagi.
+    if (out.indexOf('&') >= 0) out = decode(out)
+    return out.replace('\u00A0', ' ').trim()
+}
 
 internal data class Choice(val label: String, val selected: Boolean, val onPick: () -> Unit)
 private enum class SettingsPage { ROOT, QUALITY, SPEED, CAPTIONS, SLEEP }
@@ -145,7 +157,7 @@ internal fun CommentsSheet(comments: UiState<List<CommentItem>>, onDismiss: () -
 /** Panel deskripsi lengkap ("...selengkapnya"). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun DescriptionSheet(d: VideoDetail, onDismiss: () -> Unit) {
+internal fun DescriptionSheet(d: VideoDetail, onSeek: (Long) -> Unit, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = YgSurface) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
             Text(d.summary.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -154,7 +166,9 @@ internal fun DescriptionSheet(d: VideoDetail, onDismiss: () -> Unit) {
                 Stat(formatViewsId(d.summary.viewCount), "tontonan")
                 formatRelativeTime(d.summary.published).takeIf { it.isNotEmpty() }?.let { Stat(it, "diunggah") }
             }
-            Text(remember(d.description) { cleanHtml(d.description) }.ifBlank { "Tidak ada deskripsi." }, style = MaterialTheme.typography.bodyMedium)
+            val text = remember(d.description) { cleanHtml(d.description) }
+            if (text.isBlank()) Text("Tidak ada deskripsi.", style = MaterialTheme.typography.bodyMedium)
+            else TimestampText(text) { ms -> onSeek(ms); onDismiss() }
         }
     }
 }
@@ -164,5 +178,54 @@ private fun Stat(value: String, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(value, fontWeight = FontWeight.Bold)
         Text(label, color = YgMuted, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+private val TIMESTAMP = Regex("""(?<![\d:])(?:(\d{1,2}):)?(\d{1,2}):(\d{2})(?![\d:])""")
+
+/** Teks deskripsi dengan penanda waktu (mis. 1:23) yang bisa diketuk untuk melompat, seperti di YouTube. */
+@Composable
+private fun TimestampText(text: String, onSeek: (Long) -> Unit) {
+    val annotated = remember(text) {
+        buildAnnotatedString {
+            var last = 0
+            for (m in TIMESTAMP.findAll(text)) {
+                val h = m.groupValues[1].toLongOrNull() ?: 0L
+                val mi = m.groupValues[2].toLong()
+                val sec = m.groupValues[3].toLong()
+                if (sec >= 60 || (m.groupValues[1].isNotEmpty() && mi >= 60)) continue
+                append(text.substring(last, m.range.first))
+                pushStringAnnotation("seek", ((h * 3600 + mi * 60 + sec) * 1000).toString())
+                withStyle(SpanStyle(color = Color(0xFF3EA6FF))) { append(m.value) }
+                pop()
+                last = m.range.last + 1
+            }
+            append(text.substring(last))
+        }
+    }
+    ClickableText(
+        text = annotated,
+        style = MaterialTheme.typography.bodyMedium.copy(color = LocalContentColor.current),
+        onClick = { off -> annotated.getStringAnnotations("seek", off, off).firstOrNull()?.let { onSeek(it.item.toLong()) } },
+    )
+}
+
+/** Daftar bab video (ketuk judul bab di kontrol pemutar): ketuk satu bab untuk melompat ke sana. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ChaptersSheet(chapters: List<Chapter>, currentMs: Long, onPick: (Long) -> Unit, onDismiss: () -> Unit) {
+    val current = chapters.indexOfLast { it.startMs <= currentMs }.coerceAtLeast(0)
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = YgSurface) {
+        Text("Bab", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        LazyColumn(Modifier.heightIn(max = 560.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
+            itemsIndexed(chapters) { i, c ->
+                ListItem(
+                    headlineContent = { Text(c.title.ifBlank { "Bab ${i + 1}" }, fontWeight = if (i == current) FontWeight.Bold else FontWeight.Normal, maxLines = 2) },
+                    supportingContent = { Text(formatDuration(c.startMs / 1000), color = if (i == current) YtRed else YgMuted) },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier.clickable { onPick(c.startMs); onDismiss() },
+                )
+            }
+        }
     }
 }

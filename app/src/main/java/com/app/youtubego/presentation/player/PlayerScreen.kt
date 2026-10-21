@@ -63,6 +63,7 @@ import com.app.youtubego.domain.model.CaptionTrack
 import com.app.youtubego.domain.model.CommentItem
 import com.app.youtubego.domain.model.StreamOption
 import com.app.youtubego.domain.model.VideoDetail
+import com.app.youtubego.domain.model.VideoSummary
 import com.app.youtubego.presentation.common.*
 import com.app.youtubego.presentation.library.LibraryViewModel
 import com.app.youtubego.presentation.library.PlaylistPickerDialog
@@ -75,7 +76,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 
-private enum class PlayerSheet { SETTINGS, COMMENTS, DESCRIPTION }
+private enum class PlayerSheet { SETTINGS, COMMENTS, DESCRIPTION, CHAPTERS }
 private val SPEEDS = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
 
 /**
@@ -122,6 +123,9 @@ fun PlayerScreen(
     val holder = vm.holder
     val player = holder.player
     val snap = rememberPlayerSnapshot(player)
+    val queue by holder.queue.collectAsState()
+    // Video ini sedang diputar: keluarkan dari antrean (seperti YouTube).
+    LaunchedEffect(videoId) { holder.removeFromQueue(videoId) }
     // ON_STOP (layar mati / ke Beranda): suara lanjut bila "Putar di latar belakang" aktif, selain itu jeda.
     BackgroundPlaybackEffect(holder, backgroundPlay)
     DisposableEffect(videoId) {
@@ -215,7 +219,7 @@ fun PlayerScreen(
 
     val detail = (state as? UiState.Success)?.data
     val captions = remember(detail) { detail?.captions.orEmpty().filter { it.url.isNotBlank() } }
-    val nextVideo = detail?.recommendations?.firstOrNull { it.id != videoId }
+    val nextVideo = queue.firstOrNull { it.id != videoId } ?: detail?.recommendations?.firstOrNull { it.id != videoId }
     val ended = snap.state == Player.STATE_ENDED
     LaunchedEffect(nextVideo?.id) { holder.upNextId = nextVideo?.id }
     var autoCancelled by remember(videoId) { mutableStateOf(false) }
@@ -350,12 +354,16 @@ fun PlayerScreen(
             AndroidView(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
-                        this.player = player; useController = false; keepScreenOn = true
+                        this.player = player; useController = false
                         layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                     }
                 },
                 // Pemutar kini berumur panjang: lepaskan PlayerView agar Activity tidak bocor lewat listener-nya.
-                update = { it.resizeMode = if (zoomFill) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT },
+                update = {
+                    it.resizeMode = if (zoomFill) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    // Layar boleh mati saat dijeda (hemat baterai), tetap menyala saat memutar / buffering.
+                    it.keepScreenOn = snap.isPlaying || snap.state == Player.STATE_BUFFERING
+                },
                 onRelease = { it.player = null },
                 modifier = Modifier.fillMaxSize(),
             )
@@ -370,6 +378,8 @@ fun PlayerScreen(
                     onEnterPip = { enterPip(activity) },
                     onNext = nextVideo?.let { n -> { onVideoClick(n.id) } },
                     storyboard = device?.storyboard, chapters = device?.chapters.orEmpty(),
+                    onOpenChapters = { sheet = PlayerSheet.CHAPTERS },
+                    onPinchZoom = { zoomFill = it },
                 )
             }
             playerError?.let { msg ->
@@ -424,6 +434,13 @@ fun PlayerScreen(
                                 )
                             }
                             item { CommentsTeaser(comments) { sheet = PlayerSheet.COMMENTS } }
+                            if (queue.isNotEmpty()) {
+                                item {
+                                    Text("Antrean (${queue.size})", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall,
+                                        modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 4.dp))
+                                }
+                                items(queue, key = { "q_" + it.id }) { v -> QueueRow(v, onPlay = { onVideoClick(v.id) }, onRemove = { holder.removeFromQueue(v.id) }) }
+                            }
                             item {
                                 Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Text("Video berikutnya", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
@@ -436,7 +453,7 @@ fun PlayerScreen(
                         }
                         when (sheet) {
                             PlayerSheet.COMMENTS -> CommentsSheet(comments) { sheet = null }
-                            PlayerSheet.DESCRIPTION -> DescriptionSheet(d) { sheet = null }
+                            PlayerSheet.DESCRIPTION -> DescriptionSheet(d, onSeek = { player.seekTo(it) }) { sheet = null }
                             else -> Unit
                         }
                     }
@@ -449,6 +466,9 @@ fun PlayerScreen(
             playlists = playlists, videoId = videoId,
             onToggle = { vm.togglePlaylist(it.id) }, onCreate = vm::createPlaylist, onDismiss = { playlistDialog = false },
         )
+    }
+    if (sheet == PlayerSheet.CHAPTERS) {
+        ChaptersSheet(device?.chapters.orEmpty(), player.currentPosition, onPick = { player.seekTo(it) }) { sheet = null }
     }
     if (sheet == PlayerSheet.SETTINGS) {
         PlayerSettingsSheet(
@@ -577,4 +597,19 @@ private fun android.content.Context.findActivity(): Activity? {
     var c = this
     while (c is android.content.ContextWrapper) { if (c is Activity) return c; c = c.baseContext }
     return null
+}
+
+@Composable
+private fun QueueRow(v: VideoSummary, onPlay: () -> Unit, onRemove: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onPlay).padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        AsyncImage(
+            v.thumbnailUrl, null, contentScale = ContentScale.Crop,
+            modifier = Modifier.width(96.dp).aspectRatio(16f / 9f).clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp)).background(YgSurfaceVariant),
+        )
+        Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+            Text(v.title, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(v.author, color = YgMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        IconButton(onClick = onRemove) { Icon(Icons.Default.Close, "Hapus dari antrean", tint = YgMuted) }
+    }
 }

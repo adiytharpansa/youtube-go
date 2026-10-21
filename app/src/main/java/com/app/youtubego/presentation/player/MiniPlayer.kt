@@ -1,6 +1,14 @@
 package com.app.youtubego.presentation.player
 
 import android.view.ViewGroup
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -86,6 +94,9 @@ fun MiniPlayerBar(onOpen: (String) -> Unit, vm: MiniPlayerViewModel = hiltViewMo
             delay(500)
         }
     }
+    // Geser kiri/kanan = tutup mini player (seperti YouTube). State dideklarasikan sebelum early-return.
+    var dragX by remember(mediaId) { mutableFloatStateOf(0f) }
+    var widthPx by remember { mutableFloatStateOf(1f) }
     val id = mediaId
     if (id == null || state == Player.STATE_IDLE) return
     val ended = state == Player.STATE_ENDED
@@ -93,7 +104,30 @@ fun MiniPlayerBar(onOpen: (String) -> Unit, vm: MiniPlayerViewModel = hiltViewMo
         Box(Modifier.fillMaxWidth().height(2.dp).background(Color.White.copy(0.2f))) {
             Box(Modifier.fillMaxWidth(frac).fillMaxHeight().background(YtRed))
         }
-        Row(Modifier.fillMaxWidth().height(60.dp).clickable { onOpen(id) }, verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxWidth().height(60.dp)
+                .onSizeChanged { widthPx = it.width.toFloat().coerceAtLeast(1f) }
+                .offset { IntOffset(dragX.roundToInt(), 0) }
+                .graphicsLayer { alpha = (1f - abs(dragX) / widthPx).coerceIn(0.2f, 1f) }
+                .pointerInput(id) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = { if (abs(dragX) > widthPx * 0.35f) holder.stopIfCurrent(id) else dragX = 0f },
+                        onDragCancel = { dragX = 0f },
+                        onHorizontalDrag = { change, d -> change.consume(); dragX += d },
+                    )
+                }
+                .pointerInput(id) {
+                    // Geser naik = buka layar pemutar penuh (seperti YouTube).
+                    var acc = 0f
+                    detectVerticalDragGestures(
+                        onDragStart = { acc = 0f },
+                        onVerticalDrag = { change, d -> change.consume(); acc += d },
+                        onDragEnd = { if (acc < -40f) onOpen(id) },
+                    )
+                }
+                .clickable { onOpen(id) },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Box(Modifier.padding(start = 8.dp).width(96.dp).aspectRatio(16f / 9f).background(Color.Black)) {
                 AndroidView(
                     factory = { ctx ->

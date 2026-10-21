@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Share
@@ -54,6 +55,9 @@ fun VideoItem(
     val actions = buildList {
         add(VideoAction(if (isSaved) "Hapus dari Tonton nanti" else "Tonton nanti", Icons.Filled.WatchLater) {
             vm.toggleSaved(video); toast(if (isSaved) "Dihapus dari Tonton nanti" else "Disimpan ke Tonton nanti")
+        })
+        add(VideoAction("Tambahkan ke antrean", Icons.AutoMirrored.Filled.PlaylistPlay) {
+            toast(if (vm.enqueue(video)) "Ditambahkan ke antrean" else "Sudah ada di antrean")
         })
         add(VideoAction("Simpan ke playlist", Icons.AutoMirrored.Filled.PlaylistAdd) { pickerOpen = true })
         add(

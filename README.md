@@ -7,6 +7,18 @@ Arsitektur: **MVVM + Clean Architecture** (data / domain / presentation), Hilt, 
 melalui proksi Vercel YouTube GO yang sudah live (thumbnail & stream wajib lewat proksi karena dipagari anti-bot Anubis).
 Rincian lengkap ada di [BLUEPRINT.md](BLUEPRINT.md).
 
+## Baru di v1.47 - lanjut menonton, antrean, hemat baterai
+- **Lanjut menonton**: posisi tiap video disimpan permanen (tiap 10 dtk, saat jeda, saat keluar) dan dilanjutkan saat dibuka lagi; video yang hampir/sudah selesai mulai dari awal.
+- **Antrean**: menu titik tiga di semua kartu video punya "Tambahkan ke antrean". Antrean tampil di halaman pemutar, diputar lebih dulu daripada rekomendasi (putar otomatis, tombol Berikutnya, notifikasi), bisa dihapus per item.
+- Mini player: geser naik = buka pemutar penuh.
+- Layar tidak lagi dipaksa menyala saat video dijeda.
+
+## Baru di v1.46 - pemutar makin setara YouTube
+- Cubit dua jari di pemutar: lebarkan = isi layar, rapatkan = sesuai layar.
+- Geser turun di pemutar (portrait) = kecilkan ke mini player; mini player bisa digeser kiri/kanan untuk menutup.
+- Ketuk judul bab di kontrol pemutar membuka daftar Bab; penanda waktu di deskripsi (mis. 1:23) bisa diketuk untuk melompat.
+- Perbaikan: komentar yang menampilkan `&nbsp;` literal (HTML ter-escape dua kali) kini bersih.
+
 ## Baru di v1.45 - 100% di perangkat (tanpa server perantara)
 
 - Semua data & putar kini diekstrak langsung di HP dengan NewPipeExtractor: beranda, pencarian,

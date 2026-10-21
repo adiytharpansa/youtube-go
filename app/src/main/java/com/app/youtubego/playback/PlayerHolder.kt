@@ -10,6 +10,8 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionParameters
+import com.app.youtubego.data.local.UserLibraryStore
+import com.app.youtubego.domain.model.VideoSummary
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DataSpec
@@ -40,7 +42,10 @@ import javax.inject.Singleton
  */
 @Singleton
 @androidx.annotation.OptIn(UnstableApi::class)
-class PlayerHolder @Inject constructor(@ApplicationContext private val context: Context) {
+class PlayerHolder @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val library: UserLibraryStore,
+) {
 
     val player: ExoPlayer by lazy { create() }
 
@@ -56,6 +61,31 @@ class PlayerHolder @Inject constructor(@ApplicationContext private val context: 
     /** Emisi id video saat pengguna menekan "Berikutnya" dari notifikasi; navigasi aplikasi yang membukanya. */
     val skipNext: SharedFlow<String> = _skipNext.asSharedFlow()
     fun requestNext() { upNextId?.let { _skipNext.tryEmit(it) } }
+
+    // ---- Antrean ("Tambahkan ke antrean"): diputar lebih dulu daripada rekomendasi saat video selesai / Berikutnya ----
+    private val _queue = MutableStateFlow<List<VideoSummary>>(emptyList())
+    val queue: StateFlow<List<VideoSummary>> = _queue.asStateFlow()
+    /** false bila video itu sedang diputar atau sudah ada di antrean. */
+    fun enqueue(v: VideoSummary): Boolean {
+        if (v.id.isBlank() || v.id == player.currentMediaItem?.mediaId || _queue.value.any { it.id == v.id }) return false
+        _queue.value = _queue.value + v
+        return true
+    }
+    fun removeFromQueue(id: String) { if (_queue.value.any { it.id == id }) _queue.value = _queue.value.filter { it.id != id } }
+
+    // ---- Lanjut menonton: simpan posisi tiap 10 dtk saat memutar, saat jeda, dan saat berhenti ----
+    private val saveRunnable = object : Runnable {
+        override fun run() { persistProgress(); if (player.isPlaying) handler.postDelayed(this, 10_000) }
+    }
+    private fun persistProgress() {
+        val p = player
+        val id = p.currentMediaItem?.mediaId ?: return
+        val dur = p.duration
+        if (dur == C.TIME_UNSET || p.isCurrentMediaItemLive || dur < 60_000L) return
+        val pos = p.currentPosition
+        if (p.playbackState == Player.STATE_ENDED || pos >= dur - 10_000L) library.saveProgress(id, 0L)
+        else if (pos > 5_000L) library.saveProgress(id, pos)
+    }
 
     // ---- Timer tidur: jeda otomatis setelah N menit (hidup di holder agar tidak hilang saat pindah video) ----
     private val handler = Handler(Looper.getMainLooper())
@@ -95,7 +125,17 @@ class PlayerHolder @Inject constructor(@ApplicationContext private val context: 
             // Jaga CPU & Wi-Fi tetap hidup saat layar mati; tanpa ini stream putus di latar belakang.
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
-            .also { it.trackSelectionParameters = defaultSelection(it, videoEnabled = true) }
+            .also {
+                it.trackSelectionParameters = defaultSelection(it, videoEnabled = true)
+                it.addListener(object : Player.Listener {
+                    override fun onIsPlayingChanged(isPlaying: Boolean) {
+                        handler.removeCallbacks(saveRunnable)
+                        persistProgress()
+                        if (isPlaying) handler.postDelayed(saveRunnable, 10_000)
+                    }
+                    override fun onPlaybackStateChanged(playbackState: Int) { if (playbackState == Player.STATE_ENDED) persistProgress() }
+                })
+            }
     }
 
     /**
@@ -153,7 +193,7 @@ class PlayerHolder @Inject constructor(@ApplicationContext private val context: 
             p.setPlaybackSpeed(1f)
             p.repeatMode = Player.REPEAT_MODE_OFF
         }
-        p.setMediaItem(item, startPositionMs ?: positions.remove(item.mediaId) ?: 0L)
+        p.setMediaItem(item, startPositionMs ?: positions.remove(item.mediaId) ?: library.progressOf(item.mediaId))
         p.prepare()
         p.playWhenReady = true
         startService()
@@ -171,6 +211,7 @@ class PlayerHolder @Inject constructor(@ApplicationContext private val context: 
         val p = player
         if (p.currentMediaItem?.mediaId != mediaId) return
         upNextId = null
+        persistProgress()
         if (p.playbackState != Player.STATE_ENDED && p.currentPosition > 3_000) positions[mediaId] = p.currentPosition
         p.stop()
         p.clearMediaItems()   // PlaybackService berhenti sendiri saat daftar kosong.

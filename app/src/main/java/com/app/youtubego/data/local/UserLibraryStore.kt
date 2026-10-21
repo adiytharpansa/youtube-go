@@ -48,6 +48,9 @@ class UserLibraryStore @Inject constructor(@ApplicationContext context: Context)
     private val _wifiOnlyDownloads = MutableStateFlow(prefs.getBoolean("wifi_only_downloads", true))
     private val _historyPaused = MutableStateFlow(prefs.getBoolean("history_paused", false))
 
+    /** Posisi tonton terakhir per video (id -> ms), terbaru di belakang; dipakai untuk melanjutkan seperti YouTube. */
+    private val progress: LinkedHashMap<String, Long> = readProgress()
+
     val liked: StateFlow<Set<String>> = _liked.asStateFlow()
     val saved: StateFlow<Set<String>> = _saved.asStateFlow()
     val subscribed: StateFlow<Set<String>> = _subscribed.asStateFlow()
@@ -128,6 +131,30 @@ class UserLibraryStore @Inject constructor(@ApplicationContext context: Context)
     fun removeFromPlaylist(playlistId: String, videoId: String) =
         savePlaylists(_playlists.value.map { if (it.id == playlistId) it.copy(videoIds = it.videoIds - videoId) else it })
 
+    // ---- Lanjut menonton ----
+    @Synchronized
+    fun progressOf(videoId: String): Long = progress[videoId] ?: 0L
+
+    /** [ms] <= 0 menghapus catatan (video selesai / belum layak dilanjutkan). */
+    @Synchronized
+    fun saveProgress(videoId: String, ms: Long) {
+        if (videoId.isBlank()) return
+        if (ms <= 0L) { if (progress.remove(videoId) == null) return }
+        else { progress.remove(videoId); progress[videoId] = ms }
+        while (progress.size > MAX_PROGRESS) progress.remove(progress.keys.first())
+        prefs.edit().putString("progress", progress.entries.joinToString(",") { "${it.key}:${it.value}" }).apply()
+    }
+
+    private fun readProgress(): LinkedHashMap<String, Long> {
+        val m = LinkedHashMap<String, Long>()
+        val raw = runCatching { prefs.getString("progress", null) }.getOrNull() ?: return m
+        raw.split(",").forEach { e ->
+            val i = e.lastIndexOf(':')
+            if (i > 0) e.substring(i + 1).toLongOrNull()?.let { m[e.substring(0, i)] = it }
+        }
+        return m
+    }
+
     // ---- Preferensi ----
     fun setAutoplay(on: Boolean) { _autoplay.value = on; prefs.edit().putBoolean("autoplay", on).apply() }
     fun setBackgroundPlay(on: Boolean) { _backgroundPlay.value = on; prefs.edit().putBoolean("background_play", on).apply() }
@@ -191,5 +218,6 @@ class UserLibraryStore @Inject constructor(@ApplicationContext context: Context)
     private companion object {
         const val MAX_HISTORY = 200
         const val MAX_META = 400
+        const val MAX_PROGRESS = 150
     }
 }

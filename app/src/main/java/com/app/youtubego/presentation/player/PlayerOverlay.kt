@@ -9,6 +9,10 @@ import android.media.AudioManager
 import android.provider.Settings
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -101,6 +105,9 @@ internal fun YtPlayerOverlay(
     onNext: (() -> Unit)? = null,
     storyboard: Storyboard? = null,
     chapters: List<Chapter> = emptyList(),
+    onOpenChapters: (() -> Unit)? = null,
+    /** Cubit dua jari: true = isi layar (zoom), false = sesuai layar (seperti YouTube). */
+    onPinchZoom: (Boolean) -> Unit = {},
 ) {
     var visible by remember { mutableStateOf(true) }
     var interaction by remember { mutableIntStateOf(0) }
@@ -127,6 +134,11 @@ internal fun YtPlayerOverlay(
     fun volumeNow(): Float = audio.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
     fun setVolume(v: Float) { audio.setStreamVolume(AudioManager.STREAM_MUSIC, (v * audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)).roundToInt(), 0) }
     val fullscreenNow by rememberUpdatedState(isFullscreen)
+    val onBackNow by rememberUpdatedState(onBack)
+    val onFullscreenNow by rememberUpdatedState(onToggleFullscreen)
+    val onPinchNow by rememberUpdatedState(onPinchZoom)
+    var pinchLabel by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(pinchLabel) { if (pinchLabel != null) { delay(900); pinchLabel = null } }
     /** Lompat 10 dtk per ketukan; ketukan beruntun ke arah sama menumpuk (10 -> 20 -> 30 dtk) seperti YouTube. */
     fun doSeek(dir: Int) {
         val dur = if (player.duration == C.TIME_UNSET) Long.MAX_VALUE else player.duration
@@ -208,8 +220,28 @@ internal fun YtPlayerOverlay(
                             hudStamp++
                         }
                     },
-                    onDragEnd = { if (!fullscreenNow && acc < -90f) onToggleFullscreen() },
+                    onDragEnd = {
+                        if (!fullscreenNow) {
+                            if (acc < -90f) onFullscreenNow() else if (acc > 90f) onBackNow() // geser turun = kecilkan (mini player)
+                        }
+                    },
                 )
+            }.pointerInput(player) {
+                // Cubit dua jari: lebarkan = isi layar, rapatkan = sesuai layar. Hanya bereaksi bila >= 2 jari.
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    var scale = 1f
+                    var fired = false
+                    do {
+                        val event = awaitPointerEvent()
+                        if (event.changes.size >= 2 && !fired) {
+                            scale *= event.calculateZoom()
+                            event.changes.forEach { it.consume() }
+                            if (scale > 1.15f) { onPinchNow(true); pinchLabel = "Isi layar"; fired = true }
+                            else if (scale < 0.87f) { onPinchNow(false); pinchLabel = "Sesuai layar"; fired = true }
+                        }
+                    } while (event.changes.any { it.pressed })
+                }
             },
         )
 
@@ -229,6 +261,12 @@ internal fun YtPlayerOverlay(
                 Modifier.align(Alignment.TopCenter).padding(top = 10.dp).clip(CircleShape).background(Color.Black.copy(0.6f)).padding(horizontal = 12.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) { Icon(Icons.Default.FastForward, null, tint = Color.White, modifier = Modifier.size(16.dp)); Text(" 2x", color = Color.White, style = MaterialTheme.typography.labelMedium) }
+        }
+        pinchLabel?.let { label ->
+            Text(
+                label, color = Color.White, style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp).clip(CircleShape).background(Color.Black.copy(0.6f)).padding(horizontal = 12.dp, vertical = 4.dp),
+            )
         }
         hud?.let { (label, v) ->
             Column(
@@ -311,10 +349,18 @@ internal fun YtPlayerOverlay(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         val shown = if (scrubbing) (scrubFrac * duration).toLong() else position
                         val chapterTitle = chapters.lastOrNull { it.startMs <= shown }?.title.orEmpty()
-                        Text(
-                            "${formatDuration(shown / 1000)} / ${formatDuration(duration / 1000)}" + if (chapterTitle.isNotBlank()) "  •  $chapterTitle" else "",
-                            color = Color.White, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
-                        )
+                        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "${formatDuration(shown / 1000)} / ${formatDuration(duration / 1000)}",
+                                color = Color.White, style = MaterialTheme.typography.labelMedium, maxLines = 1,
+                            )
+                            if (chapterTitle.isNotBlank()) Text(
+                                "  •  $chapterTitle" + if (onOpenChapters != null && chapters.size > 1) "  ›" else "",
+                                color = Color.White, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                                    .clickable(enabled = onOpenChapters != null && chapters.size > 1) { onOpenChapters?.invoke(); interaction++ },
+                            )
+                        }
                         IconButton(onClick = onToggleFullscreen) {
                             Icon(if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen, "Layar penuh", tint = Color.White)
                         }
