@@ -37,7 +37,7 @@ class GetForYouFeedUseCase @Inject constructor(
         val p = interests.profile.value
         val rnd = Random(System.nanoTime())
         val seeds = p.seeds.mapNotNull(TopicCatalog::byId)
-        val trendingJob = async { repo.trending(HomeCategory.ALL) }
+        val trendingJob = async { repo.homeFeed(HomeCategory.ALL, 1) }
 
         if (seeds.isEmpty() && p.topics.isEmpty() && p.channels.isEmpty()) {
             return@coroutineScope trendingJob.await().toUi()
@@ -83,14 +83,33 @@ class GetForYouFeedUseCase @Inject constructor(
             return topicScore + seedScore + channelScore + fresh + popularity + rnd.nextDouble() * 0.2
         }
 
-        val ranked = diversify(unseen.sortedByDescending(::score)).take(32)
+        // Tidak ada video yang dibuang: urutan = relevan & belum ditonton -> sisipan penemuan -> sisanya (termasuk yang sudah ditonton).
+        val ranked = diversify(unseen.sortedByDescending(::score))
         val rankedIds = ranked.mapTo(HashSet()) { it.id }
         val explore = trending.getOrDefault(emptyList())
-            .filter { it.id !in p.seen && it.id !in rankedIds }.shuffled(rnd).take(8)
+            .filter { it.id !in rankedIds }.sortedBy { it.id in p.seen }
+        val exploreIds = explore.mapTo(HashSet()) { it.id }
+        val watchedLeftovers = pool.filter { it.id !in rankedIds && it.id !in exploreIds }
 
         val out = ranked.toMutableList()
-        explore.forEachIndexed { i, v -> out.add((4 + i * 5).coerceAtMost(out.size), v) }
-        UiState.Success(out)
+        // Sisipkan penemuan baru tiap 5 posisi mulai posisi 4; sisanya ditambahkan di belakang.
+        var inserted = 0
+        for ((i, v) in explore.withIndex()) {
+            val at = 4 + i * 5
+            if (at <= out.size && inserted == i) { out.add(at, v); inserted++ } else out.add(v)
+        }
+        out.addAll(watchedLeftovers)
+        UiState.Success(out.distinctBy { it.id })
+    }
+
+    /** Halaman lanjutan "Untuk Anda": putar kueri dari minat/topik pilihan, lalu katalog topik umum. */
+    suspend fun more(page: Int): Result<List<VideoSummary>> {
+        val p = interests.profile.value
+        val queries = (p.seeds.mapNotNull(TopicCatalog::byId).map { it.query } +
+            p.topics.entries.sortedByDescending { it.value }.take(6).map { it.key } +
+            TopicCatalog.all.map { it.query }).distinct()
+        val idx = (page - 2).coerceAtLeast(0)
+        return repo.search(queries[idx % queries.size], page = idx / queries.size + 2)
     }
 
     /** Maksimal 2 video berurutan dari channel yang sama. */

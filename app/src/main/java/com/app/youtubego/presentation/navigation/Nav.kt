@@ -17,11 +17,22 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.app.youtubego.presentation.common.EmptyState
+import com.app.youtubego.presentation.channel.ChannelScreen
 import com.app.youtubego.presentation.home.HomeScreen
+import com.app.youtubego.presentation.library.DownloadsScreen
+import com.app.youtubego.presentation.library.HistoryScreen
+import com.app.youtubego.presentation.library.LibraryItem
 import com.app.youtubego.presentation.library.LibraryScreen
+import com.app.youtubego.presentation.library.LikedScreen
+import com.app.youtubego.presentation.library.PlaylistDetailScreen
+import com.app.youtubego.presentation.library.PlaylistsScreen
+import com.app.youtubego.presentation.library.WatchLaterScreen
+import com.app.youtubego.presentation.player.OfflinePlayerScreen
 import com.app.youtubego.presentation.player.PlayerScreen
 import com.app.youtubego.presentation.search.SearchScreen
+import com.app.youtubego.presentation.settings.SettingsScreen
+import com.app.youtubego.presentation.shorts.ShortsScreen
+import com.app.youtubego.presentation.subs.SubscriptionsScreen
 import com.app.youtubego.presentation.theme.YgAccent
 import com.app.youtubego.presentation.theme.YgMuted
 import com.app.youtubego.presentation.theme.YgSurface
@@ -29,6 +40,10 @@ import com.app.youtubego.presentation.theme.YgSurface
 object Routes {
     const val HOME = "home"; const val SEARCH = "search"; const val PLAYER = "player/{videoId}"
     const val SHORTS = "shorts"; const val SUBS = "subs"; const val YOU = "you"
+    const val CHANNEL = "channel/{channelId}"
+    const val HISTORY = "library/history"; const val WATCH_LATER = "library/watchlater"; const val LIKED = "library/liked"
+    const val DOWNLOADS = "library/downloads"; const val PLAYLISTS = "library/playlists"; const val PLAYLIST = "library/playlist/{playlistId}"
+    const val SETTINGS = "settings"; const val OFFLINE = "offline/{videoId}"
 }
 
 private data class Tab(val route: String, val label: String, val off: ImageVector, val on: ImageVector)
@@ -47,6 +62,8 @@ fun YoutubeGoNavHost() {
     // Bar bawah hanya tampil di 4 halaman utama; Pemutar & Cari layar penuh.
     val showBar = tabs.any { t -> dest?.hierarchy?.any { it.route == t.route } == true }
     val openPlayer: (String) -> Unit = { nav.navigate("player/$it") }
+    val openChannel: (String) -> Unit = { if (it.isNotBlank()) nav.navigate("channel/$it") }
+    val back: () -> Unit = { nav.popBackStack() }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -76,22 +93,46 @@ fun YoutubeGoNavHost() {
         },
     ) { pad ->
         NavHost(nav, startDestination = Routes.HOME, modifier = Modifier.padding(bottom = pad.calculateBottomPadding())) {
-            composable(Routes.HOME) { HomeScreen(onVideoClick = openPlayer, onSearchClick = { nav.navigate(Routes.SEARCH) }) }
-            composable(Routes.SHORTS) {
-                EmptyState(Icons.Outlined.SlowMotionVideo, "Shorts segera hadir", "Video pendek layar penuh sedang disiapkan.")
+            composable(Routes.HOME) {
+                HomeScreen(onVideoClick = openPlayer, onSearchClick = { nav.navigate(Routes.SEARCH) }, onChannelClick = openChannel)
             }
+            composable(Routes.SHORTS) { ShortsScreen(onChannelClick = openChannel) }
             composable(Routes.SUBS) {
-                EmptyState(
-                    Icons.Outlined.Subscriptions, "Belum ada langganan",
-                    "Langganan channel favoritmu supaya video terbarunya muncul di sini.",
-                    actionLabel = "Jelajahi video",
-                    onAction = { nav.navigate(Routes.HOME) { launchSingleTop = true } },
+                SubscriptionsScreen(
+                    onVideoClick = openPlayer, onChannelClick = openChannel,
+                    onExplore = { nav.navigate(Routes.HOME) { popUpTo(nav.graph.findStartDestination().id); launchSingleTop = true } },
                 )
             }
-            composable(Routes.YOU) { LibraryScreen() }
-            composable(Routes.SEARCH) { SearchScreen(onBack = { nav.popBackStack() }, onVideoClick = openPlayer) }
+            composable(Routes.YOU) {
+                LibraryScreen(onItemClick = { item ->
+                    nav.navigate(when (item) {
+                        LibraryItem.HISTORY -> Routes.HISTORY
+                        LibraryItem.WATCH_LATER -> Routes.WATCH_LATER
+                        LibraryItem.LIKED -> Routes.LIKED
+                        LibraryItem.DOWNLOADS -> Routes.DOWNLOADS
+                        LibraryItem.PLAYLISTS -> Routes.PLAYLISTS
+                        LibraryItem.SETTINGS -> Routes.SETTINGS
+                    })
+                })
+            }
+            composable(Routes.HISTORY) { HistoryScreen(onBack = back, onVideoClick = openPlayer, onChannelClick = openChannel) }
+            composable(Routes.WATCH_LATER) { WatchLaterScreen(onBack = back, onVideoClick = openPlayer, onChannelClick = openChannel) }
+            composable(Routes.LIKED) { LikedScreen(onBack = back, onVideoClick = openPlayer, onChannelClick = openChannel) }
+            composable(Routes.DOWNLOADS) { DownloadsScreen(onBack = back, onPlayOffline = { nav.navigate("offline/$it") }) }
+            composable(Routes.PLAYLISTS) { PlaylistsScreen(onBack = back, onOpen = { nav.navigate("library/playlist/$it") }) }
+            composable(Routes.PLAYLIST, arguments = listOf(navArgument("playlistId") { type = NavType.StringType })) { entry ->
+                PlaylistDetailScreen(entry.arguments?.getString("playlistId").orEmpty(), onBack = back, onVideoClick = openPlayer, onChannelClick = openChannel)
+            }
+            composable(Routes.SETTINGS) { SettingsScreen(onBack = back) }
+            composable(Routes.CHANNEL, arguments = listOf(navArgument("channelId") { type = NavType.StringType })) {
+                ChannelScreen(onBack = back, onVideoClick = openPlayer, onChannelClick = openChannel)
+            }
+            composable(Routes.OFFLINE, arguments = listOf(navArgument("videoId") { type = NavType.StringType })) { entry ->
+                OfflinePlayerScreen(entry.arguments?.getString("videoId").orEmpty(), onBack = back)
+            }
+            composable(Routes.SEARCH) { SearchScreen(onBack = back, onVideoClick = openPlayer, onChannelClick = openChannel) }
             composable(Routes.PLAYER, arguments = listOf(navArgument("videoId") { type = NavType.StringType })) { entry ->
-                PlayerScreen(videoId = entry.arguments?.getString("videoId").orEmpty(), onBack = { nav.popBackStack() }, onVideoClick = openPlayer)
+                PlayerScreen(videoId = entry.arguments?.getString("videoId").orEmpty(), onBack = back, onVideoClick = openPlayer, onChannelClick = openChannel)
             }
         }
     }

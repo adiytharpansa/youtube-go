@@ -158,3 +158,13 @@ teks `#F3F4F6`, teks redup `#9AA0AB`, aksen primer `#FF2E4D`, aksen sekunder `#F
 
 - Debug: GitHub Actions → **Build Debug APK** → Run workflow → artefak `youtube-go-debug` (diunduh dari HP, tanpa PC).
 - Rilis: hanya atas perintah pemilik proyek; keystore tidak pernah disimpan di repo.
+
+---
+
+## 12. Pembaruan v1.43 — Beranda penuh & halaman baru
+
+- `VideoRepository.homeFeed(category, page)`: halaman 1 menggabungkan trending + popular + musik + game (kategori Semua/Untuk Anda) atau dua halaman pencarian (Mix/Berita/Belajar); halaman >= 2 memutar kueri per kategori (`HomeCategory.moreQueries`) dengan nomor halaman naik. `HomeViewModel.loadMore()` menambah daftar, membuang duplikat, melewati halaman yang semuanya duplikat (maks. 3x), dan menandai `endReached`/`loadMoreFailed`.
+- `GetForYouFeedUseCase` tidak lagi memotong 32 video / 8 sisipan; sisanya ditempatkan di belakang. `more(page)` untuk lanjutan berbasis minat.
+- `UserLibraryStore`: daftar berurut (suka, tonton nanti, langganan, riwayat), metadata video, playlist, preferensi (autoplay, kualitas bawaan, Wi-Fi saja, jeda riwayat). `DownloadStore`: unduhan Range-resumable ke `filesDir/downloads`, diputar lewat `OfflinePlayerScreen`.
+- Rute baru: `shorts`, `subs`, `channel/{id}`, `library/{history|watchlater|liked|downloads|playlists}`, `library/playlist/{id}`, `settings`, `offline/{id}`.
+- Batasan jujur: unduhan berjalan selama proses aplikasi hidup (tanpa foreground service); Shorts memakai pencarian `duration=short` disaring <= 3 menit karena API publik tidak punya endpoint Shorts; tema terang tetap tahap 2.

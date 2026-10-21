@@ -11,8 +11,11 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -23,12 +26,21 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.app.youtubego.R
 import com.app.youtubego.domain.repository.HomeCategory
 import com.app.youtubego.presentation.common.*
+import com.app.youtubego.presentation.library.LibraryViewModel
+import com.app.youtubego.presentation.library.VideoItem
+import com.app.youtubego.presentation.theme.YgMuted
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.text.style.TextAlign
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(onVideoClick: (String) -> Unit, onSearchClick: () -> Unit, vm: HomeViewModel = hiltViewModel()) {
+fun HomeScreen(
+    onVideoClick: (String) -> Unit, onSearchClick: () -> Unit, onChannelClick: (String) -> Unit = {},
+    vm: HomeViewModel = hiltViewModel(), libVm: LibraryViewModel = hiltViewModel(),
+) {
     val state by vm.state.collectAsState()
     val profile by vm.profile.collectAsState()
     val listState = rememberLazyListState()
+    LaunchedEffect(state.category) { listState.scrollToItem(0) }
     // Beranda selalu mengikuti minat: tiap kembali tampil (mis. setelah menonton/mencari), feed disegarkan bila profil berubah.
     LifecycleResumeEffect(Unit) { vm.refreshIfStale(); onPauseOrDispose { } }
     if (state.showInterestSheet) {
@@ -70,9 +82,24 @@ fun HomeScreen(onVideoClick: (String) -> Unit, onSearchClick: () -> Unit, vm: Ho
                     is UiState.Success -> if (s.data.isEmpty()) {
                         ErrorBox("Tidak ada video untuk kategori ini.") { vm.retry() }
                     } else {
+                        // Scroll tak terbatas: minta halaman berikutnya saat 4 item terakhir mulai terlihat.
+                        val nearEnd by remember { derivedStateOf {
+                            val info = listState.layoutInfo
+                            val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+                            info.totalItemsCount > 0 && last >= info.totalItemsCount - 4
+                        } }
+                        LaunchedEffect(nearEnd, s.data.size, state.loadingMore, state.loadMoreFailed) { if (nearEnd && !state.loadMoreFailed) vm.loadMore() }
                         // key stabil + contentType: kunci scroll halus & reuse komposisi di daftar panjang.
                         LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                            items(s.data, key = { it.id }, contentType = { "video" }) { v -> VideoCardPro(v, onVideoClick) }
+                            items(s.data, key = { it.id }, contentType = { "video" }) { v -> VideoItem(v, onVideoClick, onChannelClick, libVm) }
+                            when {
+                                state.loadingMore -> items(2, key = { "more-shimmer-$it" }, contentType = { "shimmer" }) { VideoCardShimmer() }
+                                state.loadMoreFailed -> item(key = "more-error", contentType = "footer") { ErrorBox("Gagal memuat video berikutnya.") { vm.loadMore() } }
+                                state.endReached -> item(key = "end", contentType = "footer") {
+                                    Text("Kamu sudah melihat semua video untuk saat ini.", color = YgMuted, textAlign = TextAlign.Center,
+                                        modifier = Modifier.fillMaxWidth().padding(24.dp))
+                                }
+                            }
                         }
                     }
                 }

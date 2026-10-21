@@ -7,11 +7,16 @@ import com.app.youtubego.presentation.common.UiState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import javax.inject.Inject
+/** Halaman lanjutan beranda (scroll tak terbatas). FOR_YOU memakai profil minat, lainnya memakai kueri per kategori. */
+class LoadMoreHomeUseCase @Inject constructor(private val repo: VideoRepository, private val forYou: GetForYouFeedUseCase) {
+    suspend operator fun invoke(category: HomeCategory, page: Int): Result<List<VideoSummary>> =
+        if (category == HomeCategory.FOR_YOU) forYou.more(page) else repo.homeFeed(category, page)
+}
 /** Pola baku semua use case: Flow<UiState<T>> = Loading -> Success | Error(pesan ramah, tanpa istilah teknis mentah). */
 class GetTrendingUseCase @Inject constructor(private val repo: VideoRepository) {
     operator fun invoke(category: HomeCategory): Flow<UiState<List<VideoSummary>>> = flow {
         emit(UiState.Loading)
-        emit(repo.trending(category).fold(onSuccess = { UiState.Success(it) }, onFailure = { UiState.Error(it.toFriendlyMessage()) }))
+        emit(repo.homeFeed(category, 1).fold(onSuccess = { UiState.Success(it) }, onFailure = { UiState.Error(it.toFriendlyMessage()) }))
     }
 }
 class SearchVideosUseCase @Inject constructor(private val repo: VideoRepository) {

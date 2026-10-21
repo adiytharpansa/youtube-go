@@ -6,6 +6,9 @@ import com.app.youtubego.domain.model.*
 import com.app.youtubego.domain.repository.HomeCategory
 import com.app.youtubego.domain.repository.VideoRepository
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Named
@@ -39,6 +42,44 @@ class VideoRepositoryImpl @Inject constructor(
             d.subCountText, d.description, d.latestVideos.map { it.toSummary() })
     }
     override suspend fun channelLatest(ucid: String): Result<List<VideoSummary>> = runIo { api.channelLatest(ucid).map { it.toSummary() } }
+
+    override suspend fun homeFeed(category: HomeCategory, page: Int): Result<List<VideoSummary>> = runIo {
+        if (page <= 1) firstPage(category) else morePage(category, page)
+    }
+
+    /** Halaman 1: gabungkan SEMUA sumber yang relevan supaya beranda tidak hanya berisi satu daftar trending pendek. */
+    private suspend fun firstPage(category: HomeCategory): List<VideoSummary> = coroutineScope {
+        val fb = category.searchFallback
+        val results: List<Result<List<VideoSummary>>> = when {
+            fb != null -> listOf(1, 2).map { pg ->
+                async { runCatching { searchVideoItems(fb, pg) } }
+            }
+            category == HomeCategory.ALL || category == HomeCategory.FOR_YOU -> listOf(
+                async { runCatching { api.trending(null).map { it.toSummary() } } },
+                async { runCatching { api.popular().map { it.toSummary() } } },
+                async { runCatching { api.trending("music").map { it.toSummary() } } },
+                async { runCatching { api.trending("gaming").map { it.toSummary() } } },
+            )
+            else -> listOf(
+                async { runCatching { api.trending(category.apiType).map { it.toSummary() } } },
+                async { runCatching { searchVideoItems(category.moreQueries.firstOrNull() ?: category.apiType.orEmpty(), 1) } },
+            )
+        }.awaitAll()
+        val merged = results.flatMap { it.getOrDefault(emptyList()) }.filter { it.id.isNotBlank() }.distinctBy { it.id }
+        if (merged.isEmpty()) results.firstNotNullOfOrNull { it.exceptionOrNull() }?.let { throw it }
+        merged
+    }
+
+    /** Halaman >= 2: putar daftar kueri per kategori; tiap putaran penuh naik satu halaman hasil pencarian. */
+    private suspend fun morePage(category: HomeCategory, page: Int): List<VideoSummary> {
+        val queries = category.moreQueries.ifEmpty { TopicCatalog.all.map { it.query } }
+        val idx = page - 2
+        return searchVideoItems(queries[idx % queries.size], idx / queries.size + 2)
+    }
+
+    private suspend fun searchVideoItems(query: String, page: Int): List<VideoSummary> =
+        api.search(query, page = page).filter { it.type == "video" && it.videoId.isNotBlank() }.map { it.toSummary() }
+
     private suspend fun <T> runIo(block: suspend () -> T): Result<T> =
         withContext(io) { runCatching { block() } }
 }

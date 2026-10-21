@@ -18,3 +18,6 @@ data class VideoDetail(
 )
 data class CommentItem(val author: String, val avatarUrl: String, val content: String, val published: Long, val likeCount: Long)
 data class ChannelInfo(val id: String, val name: String, val avatarUrl: String, val bannerUrl: String, val subscriberText: String, val description: String, val latest: List<VideoSummary>)
+
+/** Playlist buatan pengguna, tersimpan lokal di perangkat. [videoIds] urut dari yang terbaru ditambahkan. */
+data class Playlist(val id: String, val name: String, val videoIds: List<String> = emptyList())

@@ -12,8 +12,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.app.youtubego.presentation.common.*
+import com.app.youtubego.presentation.library.LibraryViewModel
+import com.app.youtubego.presentation.library.VideoItem
 @Composable
-fun SearchScreen(onBack: () -> Unit, onVideoClick: (String) -> Unit, vm: SearchViewModel = hiltViewModel()) {
+fun SearchScreen(onBack: () -> Unit, onVideoClick: (String) -> Unit, onChannelClick: (String) -> Unit = {}, vm: SearchViewModel = hiltViewModel(), libVm: LibraryViewModel = hiltViewModel()) {
     val state by vm.state.collectAsState()
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -35,7 +37,7 @@ fun SearchScreen(onBack: () -> Unit, onVideoClick: (String) -> Unit, vm: SearchV
         when (val s = state.results) {
             is UiState.Loading -> LazyColumn { items(4) { VideoCardShimmer() } }
             is UiState.Error -> ErrorBox(s.message) { vm.submit() }
-            is UiState.Success -> LazyColumn(Modifier.fillMaxSize()) { items(s.data, key = { it.id }) { v -> VideoCardPro(v, onVideoClick) } }
+            is UiState.Success -> LazyColumn(Modifier.fillMaxSize()) { items(s.data, key = { it.id }) { v -> VideoItem(v, onVideoClick, onChannelClick, libVm) } }
         }
     }
 }

@@ -8,8 +8,15 @@ interface VideoRepository {
     suspend fun comments(id: String): Result<List<CommentItem>>
     suspend fun channel(ucid: String): Result<ChannelInfo>
     suspend fun channelLatest(ucid: String): Result<List<VideoSummary>>
+    /** Beranda berhalaman: page 1 = gabungan beberapa sumber, page >= 2 = lanjutan tak terbatas lewat pencarian. */
+    suspend fun homeFeed(category: HomeCategory, page: Int): Result<List<VideoSummary>>
 }
-enum class HomeCategory(val apiType: String?, val searchFallback: String?) {
-    FOR_YOU(null, null), ALL(null, null), MUSIC("music", null), GAMING("gaming", null),
-    MIX(null, "musik mix"), NEWS(null, "berita terkini"), LEARN(null, "belajar")
+enum class HomeCategory(val apiType: String?, val searchFallback: String?, val moreQueries: List<String> = emptyList()) {
+    FOR_YOU(null, null),
+    ALL(null, null),
+    MUSIC("music", null, listOf("musik populer terbaru", "lagu hits indonesia terbaru", "cover akustik", "musik santai playlist", "konser live musik")),
+    GAMING("gaming", null, listOf("gameplay game populer", "mobile legends", "minecraft indonesia", "game terbaru review", "highlight gaming")),
+    MIX(null, "musik mix", listOf("musik mix terbaru", "dj remix", "nonstop mix", "lagu galau mix")),
+    NEWS(null, "berita terkini", listOf("berita hari ini", "berita politik terkini", "berita ekonomi", "berita olahraga terkini")),
+    LEARN(null, "belajar", listOf("tutorial belajar", "belajar pemrograman", "pelajaran sekolah", "tips belajar efektif", "sains fakta menarik")),
 }
