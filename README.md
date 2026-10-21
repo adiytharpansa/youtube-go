@@ -45,6 +45,12 @@ Rincian lengkap ada di [BLUEPRINT.md](BLUEPRINT.md).
 ## Build debug (di GitHub Actions, tanpa PC)
 Actions → **Build Debug APK** → Run workflow → unduh artefak `youtube-go-debug`.
 
+## Baru di v1.54.0 - ekstraktor sendiri + cache media
+- **Jalur utama buatan sendiri** (`data/innertube/InnertubeClient.kt`): SATU permintaan POST ke `/youtubei/v1/player` (klien ANDROID_VR, URL langsung tanpa JavaScript/cipher) menggantikan beberapa permintaan NewPipe. **NewPipeExtractor tetap jadi cadangan otomatis**: bila jalur sendiri gagal mengekstrak, atau pemutaran dari jalur itu gagal (mis. 403), video itu pindah ke NewPipe; 3 kegagalan beruntun mematikan jalur sendiri 15-30 menit lalu dicoba lagi. YouTube bisa menutup klien ini kapan saja - itulah gunanya cadangan. Storyboard/bab dilengkapi NewPipe di latar belakang.
+- **Cache media disk 256 MB (LRU)**: menonton ulang, mundur, dan kembali ke video yang sama tidak mengunduh lagi. Kunci cache stabil (id-stream+itag+ukuran) karena URL googlevideo berganti tiap kali.
+- **Prefetch Beranda**: 2 video teratas diekstrak lebih dulu (Wi-Fi saja).
+- **Kualitas otomatis** mengikuti kecepatan jaringan (720p >=12 Mbps, 480p >=5, 360p >=2; data seluler maks 480p).
+
 ## Baru di v1.53.1 - video mulai & jalan lebih cepat
 - **Satu unduhan, bukan dua**: halaman tonton YouTube dulu diekstrak dua kali paralel (pemutar + detail) dan stream di-parse dua kali; kini dibagi lewat `DeviceStreamSource.sharedExtractor` (permintaan serentak menunggu pekerjaan yang sama).
 - **Prefetch**: 2 video berikutnya (1 di data seluler; antrean lebih dulu) diekstrak di latar belakang, jadi "Berikutnya"/putar otomatis hampir instan.

@@ -77,7 +77,8 @@ class PlayerViewModel @Inject constructor(
         (_state.value as? UiState.Success)?.data?.summary ?: _device.value?.summary
     init { load() }
     /** Muat ulang dari awal (URL putar kedaluwarsa, jadi retry WAJIB mengambil data segar dari kedua jalur, bukan memutar ulang URL lama). */
-    fun retry() { forceFresh = true; deviceSource.invalidate(videoId); load() }
+    /** retry hanya terjadi setelah ada kegagalan: coba jalur cadangan (NewPipe) untuk video ini, bukan jalur sendiri lagi. */
+    fun retry() { forceFresh = true; deviceSource.avoidOwn(videoId); load() }
     fun toggleLike() { val v = currentSummary(); if (v != null) library.toggleLiked(v) else library.toggleLiked(videoId) }
     fun toggleSave() { val v = currentSummary(); if (v != null) library.toggleSaved(v) else library.toggleSaved(videoId) }
     fun download() { currentSummary()?.let { downloads.start(it) } }
@@ -107,6 +108,13 @@ class PlayerViewModel @Inject constructor(
             _device.value = resolved
             resolved?.let { recordWatchOnce(it.summary); if (_state.value !is UiState.Success) library.addHistory(it.summary) }
             _deviceSettled.value = true
+            // Jalur sendiri tidak membawa storyboard/bab: lengkapi dari NewPipe di latar belakang (tidak menahan putar).
+            if (resolved != null && resolved.storyboard == null && resolved.chapters.isEmpty()) {
+                launch {
+                    val ex = runCatching { deviceSource.extras(videoId) }.getOrNull() ?: return@launch
+                    if (ex.first != null || ex.second.isNotEmpty()) _device.value = _device.value?.copy(storyboard = ex.first, chapters = ex.second)
+                }
+            }
             // Detail API terlanjur galat duluan, tetapi perangkat membawa data: tampilkan detail cadangan.
             if (resolved != null && _state.value is UiState.Error) {
                 _state.value = UiState.Success(fallbackDetail(resolved))

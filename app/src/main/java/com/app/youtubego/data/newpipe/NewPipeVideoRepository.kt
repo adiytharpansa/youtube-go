@@ -235,8 +235,11 @@ class NewPipeVideoRepository @Inject constructor(
 
     override suspend fun videoDetail(id: String): Result<VideoDetail> = runIo {
         // Halaman tonton diunduh SEKALI dan dibagi dengan pemutar (DeviceStreamSource); dulu diunduh dua kali paralel.
-        val extractor = deviceSource.sharedExtractor(id)
-        val dev = deviceSource.resolve(id).getOrNull()
+        val (extractor, dev) = coroutineScope {
+            val e = async { deviceSource.sharedExtractor(id) }
+            val d = async { deviceSource.resolve(id).getOrNull() }
+            e.await() to d.await()
+        }
         synchronized(extractor) { buildDetail(id, extractor, dev) }
     }
 

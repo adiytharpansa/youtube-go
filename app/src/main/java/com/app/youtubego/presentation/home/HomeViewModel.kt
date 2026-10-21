@@ -32,6 +32,8 @@ class HomeViewModel @Inject constructor(
     private val getForYou: GetForYouFeedUseCase,
     private val loadMoreHome: LoadMoreHomeUseCase,
     private val interestRepo: InterestRepository,
+    private val deviceSource: com.app.youtubego.data.newpipe.DeviceStreamSource,
+    private val holder: com.app.youtubego.playback.PlayerHolder,
 ) : ViewModel() {
     private val _state = MutableStateFlow(HomeUiState(showInterestSheet = !interestRepo.profile.value.onboarded))
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
@@ -60,7 +62,13 @@ class HomeViewModel @Inject constructor(
                 silent && r is UiState.Error && _state.value.videos is UiState.Success -> _state.update { it.copy(refreshing = false) }
                 else -> _state.update { it.copy(videos = r, refreshing = false) }
             }
+            if (r is UiState.Success) prefetchTop(r.data)
         }.launchIn(viewModelScope)
+    }
+    /** Ekstrak 2 video teratas di Beranda lebih dulu (Wi-Fi saja): ketukan pertama langsung memutar. */
+    private fun prefetchTop(list: List<VideoSummary>) {
+        if (holder.isMetered()) return
+        list.asSequence().filter { it.id.isNotBlank() && !it.isLive }.take(2).forEach { deviceSource.prefetch(it.id) }
     }
     /**
      * Scroll tak terbatas: ambil halaman berikutnya dan tambahkan ke daftar. Halaman yang isinya duplikat semua

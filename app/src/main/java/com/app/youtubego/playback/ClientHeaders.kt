@@ -31,6 +31,7 @@ object ClientHeaders {
         "ANDROID" -> extractorUserAgent("getAndroidUserAgent")
         "IOS" -> extractorUserAgent("getIosUserAgent")
         "VISIONOS" -> extractorUserAgent("getVisionOsUserAgent")
+        "ANDROID_VR" -> com.app.youtubego.data.innertube.InnertubeClient.USER_AGENT
         else -> null
     } ?: WEB_UA
 

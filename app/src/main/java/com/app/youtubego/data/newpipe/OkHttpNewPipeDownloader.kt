@@ -1,6 +1,7 @@
 package com.app.youtubego.data.newpipe
 
 import okhttp3.OkHttpClient
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
@@ -14,6 +15,17 @@ import java.io.IOException
  * berasal dari extractor, bukan dari aplikasi.
  */
 class OkHttpNewPipeDownloader(private val client: OkHttpClient) : Downloader() {
+
+    /** POST JSON sederhana untuk klien Innertube buatan sendiri; melempar IOException bila status bukan 2xx. */
+    @Throws(IOException::class)
+    fun postJson(url: String, headers: Map<String, String>, body: String): String {
+        val b = okhttp3.Request.Builder().url(url).post(body.toRequestBody("application/json".toMediaType()))
+        headers.forEach { (k, v) -> b.header(k, v) }
+        client.newCall(b.build()).execute().use { resp ->
+            if (!resp.isSuccessful) throw IOException("HTTP ${resp.code}")
+            return resp.body?.string() ?: throw IOException("respons kosong")
+        }
+    }
 
     /** Buka koneksi TCP+TLS(+HTTP/2) ke host YouTube lebih awal; permintaan ekstraksi pertama tidak lagi membayar handshake. */
     fun warmUp() {

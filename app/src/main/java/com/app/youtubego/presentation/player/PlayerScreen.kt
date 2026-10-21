@@ -292,7 +292,7 @@ fun PlayerScreen(
     }
 
     val detail = (state as? UiState.Success)?.data
-    val captions = remember(detail) { detail?.captions.orEmpty().filter { it.url.isNotBlank() } }
+    val captions = remember(detail, device) { detail?.captions.orEmpty().ifEmpty { device?.captions.orEmpty() }.filter { it.url.isNotBlank() } }
     val prevVideo = if (runNow != null && runIndex > 0) runNow.videos[runIndex - 1] else null
     val nextVideo = queue.firstOrNull { it.id != videoId }
         ?: (if (runNow != null && runIndex >= 0) runNow.videos.getOrNull(runIndex + 1) else detail?.recommendations?.firstOrNull { it.id != videoId })
@@ -331,7 +331,7 @@ fun PlayerScreen(
         val devCombined = (if (highQuality) dev?.combined?.lastOrNull() else dev?.combined?.firstOrNull())?.url
         val devHls = dev?.hlsUrl
         val combined = (if (highQuality) d?.combinedStreams?.lastOrNull() else d?.combinedStreams?.firstOrNull())?.url
-        val subs = d?.captions.orEmpty().filter { it.url.isNotBlank() }
+        val subs = d?.captions.orEmpty().ifEmpty { dev?.captions.orEmpty() }.filter { it.url.isNotBlank() }
         val summary = d?.summary ?: dev?.summary
         // Daftar sumber berurutan prioritas; sourceSkip memilih yang ke-n bila sumber sebelumnya gagal diputar.
         // Sumber PALING ATAS: video-saja + audio-saja digabung (480p-1080p). YouTube hampir tak pernah memberi manifes DASH

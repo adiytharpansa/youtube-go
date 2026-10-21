@@ -14,6 +14,11 @@ import com.app.youtubego.data.local.UserLibraryStore
 import com.app.youtubego.domain.model.VideoSummary
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
+import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -32,6 +37,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import okhttp3.ConnectionPool
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
+import java.io.File
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -135,6 +141,24 @@ class PlayerHolder @Inject constructor(
             .build()
     }
 
+    private val mediaCache: SimpleCache? by lazy {
+        runCatching {
+            SimpleCache(File(context.cacheDir, "media"), LeastRecentlyUsedCacheEvictor(256L * 1024 * 1024), StandaloneDatabaseProvider(context))
+        }.getOrNull()
+    }
+
+    /**
+     * Kunci cache: URL googlevideo berganti tiap kali (tanda tangan/kedaluwarsa) padahal isinya sama, jadi kuncinya
+     * id-stream + itag + ukuran. Siaran langsung, segmen (sq=), manifes & URL lain diberi kunci unik (tidak pernah basi).
+     */
+    private fun cacheKey(uri: android.net.Uri): String {
+        val id = uri.getQueryParameter("id")
+        val itag = uri.getQueryParameter("itag")
+        val stable = uri.host?.endsWith("googlevideo.com") == true && uri.path == "/videoplayback" && id != null && itag != null &&
+            uri.getQueryParameter("sq") == null && uri.getQueryParameter("live") == null
+        return if (stable) "$id-$itag-${uri.getQueryParameter("clen").orEmpty()}" else uri.toString() + "#" + System.nanoTime()
+    }
+
     /** true bila jaringan aktif berbayar (data seluler): prefetch dikurangi agar kuota hemat. */
     fun isMetered(): Boolean {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
@@ -144,7 +168,15 @@ class PlayerHolder @Inject constructor(
     val dataSourceFactory: androidx.media3.datasource.DataSource.Factory by lazy {
         // Catatan: User-Agent TIDAK diatur di pabrik ini (di Media3 nilai itu menimpa header per-permintaan);
         // diatur per permintaan lewat ResolvingDataSource, mengikuti klien YouTube pembuat URL (param c=).
-        val http = OkHttpDataSource.Factory(mediaClient)
+        val okHttp = OkHttpDataSource.Factory(mediaClient)
+        // Cache disk 256 MB (LRU) khusus HTTP(S): menonton ulang / mundur / kembali ke video yang sama tidak mengunduh lagi.
+        // File lokal (unduhan) tetap lewat DefaultDataSource tanpa cache.
+        val cache = mediaCache
+        val http: androidx.media3.datasource.DataSource.Factory =
+            if (cache == null) okHttp
+            else CacheDataSource.Factory().setCache(cache).setUpstreamDataSourceFactory(okHttp)
+                .setCacheKeyFactory { spec: DataSpec -> cacheKey(spec.uri) }
+                .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
         ResolvingDataSource.Factory(DefaultDataSource.Factory(context, http)) { spec -> ClientHeaders.apply(spec) }
     }
 
