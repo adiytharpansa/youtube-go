@@ -2,6 +2,7 @@ package com.app.youtubego.data.local
 
 import android.content.Context
 import com.app.youtubego.domain.model.Playlist
+import com.app.youtubego.presentation.theme.ThemeMode
 import com.app.youtubego.domain.model.VideoSummary
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,6 +48,7 @@ class UserLibraryStore @Inject constructor(@ApplicationContext context: Context)
     private val _backgroundPlay = MutableStateFlow(prefs.getBoolean("background_play", true))
     private val _wifiOnlyDownloads = MutableStateFlow(prefs.getBoolean("wifi_only_downloads", true))
     private val _historyPaused = MutableStateFlow(prefs.getBoolean("history_paused", false))
+    private val _themeMode = MutableStateFlow(prefs.getInt("theme_mode", ThemeMode.Default.id))
 
     /** Posisi tonton terakhir per video (id -> ms), terbaru di belakang; dipakai untuk melanjutkan seperti YouTube. */
     private val progress: LinkedHashMap<String, Long> = readProgress()
@@ -76,6 +78,8 @@ class UserLibraryStore @Inject constructor(@ApplicationContext context: Context)
     val backgroundPlay: StateFlow<Boolean> = _backgroundPlay.asStateFlow()
     val wifiOnlyDownloads: StateFlow<Boolean> = _wifiOnlyDownloads.asStateFlow()
     val historyPaused: StateFlow<Boolean> = _historyPaused.asStateFlow()
+    /** Pilihan tema: 0 otomatis (ikut sistem), 1 terang, 2 gelap . Bawaan: terang. Lihat ThemeMode. */
+    val themeMode: StateFlow<Int> = _themeMode.asStateFlow()
 
     // ---- Suka / Tonton nanti / Langganan ----
     fun toggleLiked(videoId: String) = toggle("liked", _liked, videoId)
@@ -173,6 +177,7 @@ class UserLibraryStore @Inject constructor(@ApplicationContext context: Context)
     fun setHighQuality(on: Boolean) { _highQuality.value = on; prefs.edit().putBoolean("high_quality", on).apply() }
     fun setWifiOnlyDownloads(on: Boolean) { _wifiOnlyDownloads.value = on; prefs.edit().putBoolean("wifi_only_downloads", on).apply() }
     fun setHistoryPaused(on: Boolean) { _historyPaused.value = on; prefs.edit().putBoolean("history_paused", on).apply() }
+    fun setThemeMode(id: Int) { _themeMode.value = id; prefs.edit().putInt("theme_mode", id).apply() }
 
     /** Simpan metadata sebuah video agar bisa ditampilkan di halaman koleksi (dibatasi agar prefs tidak membengkak). */
     @Synchronized

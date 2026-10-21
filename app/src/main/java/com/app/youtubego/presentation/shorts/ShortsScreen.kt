@@ -55,6 +55,7 @@ import com.app.youtubego.domain.usecase.toFriendlyMessage
 import com.app.youtubego.playback.PlayerHolder
 import com.app.youtubego.presentation.common.EmptyState
 import com.app.youtubego.presentation.common.formatViewsId
+import com.app.youtubego.presentation.theme.ForceLightStatusBarIcons
 import com.app.youtubego.presentation.theme.YgAccent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -197,6 +198,7 @@ fun ShortsScreen(onChannelClick: (String) -> Unit, vm: ShortsViewModel = hiltVie
 
     when {
         state.loading -> Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+            ForceLightStatusBarIcons()
             CircularProgressIndicator(color = YgAccent)
         }
         state.videos.isEmpty() -> EmptyState(
@@ -204,6 +206,7 @@ fun ShortsScreen(onChannelClick: (String) -> Unit, vm: ShortsViewModel = hiltVie
             actionLabel = "Coba lagi", onAction = vm::load,
         )
         else -> {
+            ForceLightStatusBarIcons()
             val pager = rememberPagerState { state.videos.size }
             // Muat halaman berikutnya saat tersisa 3 video lagi.
             LaunchedEffect(pager.currentPage, state.videos.size) {

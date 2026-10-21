@@ -1,32 +1,112 @@
 package com.app.youtubego.presentation.theme
+import android.app.Activity
+import android.content.ContextWrapper
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.ripple.RippleAlpha
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-// Token warna PERSIS dari web app (CSS :root dark): bg #0A0B0D, surface #101114, chip #1C1E23,
-// garis #23252B, teks #F3F4F6, redup #9AA0AB, aksen gradasi #FF2E4D -> #FF6A3D.
-val YgBackground = Color(0xFF0A0B0D)
-val YgSurface = Color(0xFF101114)
-val YgSurfaceVariant = Color(0xFF1C1E23)
-val YgOutline = Color(0xFF23252B)
-val YgOnSurface = Color(0xFFF3F4F6)
-val YgMuted = Color(0xFF9AA0AB)
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+
+/** Pilihan tema di Pengaturan. [id] disimpan di SharedPreferences, jadi JANGAN diubah urutannya. */
+enum class ThemeMode(val id: Int, val label: String, val description: String) {
+    SYSTEM(0, "Otomatis", "Mengikuti tema HP (terang/gelap)"),
+    LIGHT(1, "Terang", "Latar putih"),
+    DARK(2, "Gelap", "Latar hitam");
+
+    /** Versi non-composable (dipakai MainActivity sebelum Compose siap). */
+    fun resolveDark(systemDark: Boolean): Boolean = when (this) { SYSTEM -> systemDark; LIGHT -> false; DARK -> true }
+
+    companion object {
+        // Bawaan: TERANG (putih). Ganti ke SYSTEM/DARK bila ingin bawaan lain.
+        val Default = LIGHT
+        fun fromId(id: Int): ThemeMode = values().firstOrNull { it.id == id } ?: Default
+    }
+}
+
+/** Apakah mode ini sedang gelap? SYSTEM membaca tema sistem dan ikut berubah otomatis saat sistem berganti. */
+@Composable
+fun ThemeMode.isDark(): Boolean = resolveDark(isSystemInDarkTheme())
+
+// Aksen sama di kedua tema: gradasi #FF2E4D -> #FF6A3D.
 val YgAccent = Color(0xFFFF2E4D)
 val YgAccent2 = Color(0xFFFF6A3D)
-private val DarkColors = darkColorScheme(
-    primary = YgAccent, secondary = YgAccent2, background = YgBackground, surface = YgSurface,
-    surfaceVariant = YgSurfaceVariant, outline = YgOutline, onBackground = YgOnSurface,
-    onSurface = YgOnSurface, onSurfaceVariant = YgMuted, error = Color(0xFFFF5B74),
+
+/** Satu set warna dasar per tema. Dibaca lewat YgBackground, YgSurface, dst. (otomatis mengikuti tema aktif). */
+@Immutable
+class YgPalette(
+    val background: Color, val surface: Color, val surfaceVariant: Color, val surfaceHigh: Color,
+    val outline: Color, val onSurface: Color, val muted: Color,
 )
-private val LightColors = lightColorScheme(primary = YgAccent, secondary = YgAccent2)
+
+// Token warna PERSIS dari web app (CSS :root dark): bg #0A0B0D, surface #101114, chip #1C1E23,
+// garis #23252B, teks #F3F4F6, redup #9AA0AB.
+val DarkPalette = YgPalette(
+    background = Color(0xFF0A0B0D), surface = Color(0xFF101114), surfaceVariant = Color(0xFF1C1E23), surfaceHigh = Color(0xFF2A2D35),
+    outline = Color(0xFF23252B), onSurface = Color(0xFFF3F4F6), muted = Color(0xFF9AA0AB),
+)
+val LightPalette = YgPalette(
+    background = Color(0xFFFFFFFF), surface = Color(0xFFF6F7F9), surfaceVariant = Color(0xFFEBEDF0), surfaceHigh = Color(0xFFDDE0E5),
+    outline = Color(0xFFD9DCE1), onSurface = Color(0xFF0F1115), muted = Color(0xFF5F6672),
+)
+val LocalYgPalette = staticCompositionLocalOf { DarkPalette }
+
+// Nama lama dipertahankan supaya seluruh layar yang sudah ada tidak perlu diubah: kini bernilai sesuai tema aktif.
+val YgBackground: Color @Composable @ReadOnlyComposable get() = LocalYgPalette.current.background
+val YgSurface: Color @Composable @ReadOnlyComposable get() = LocalYgPalette.current.surface
+val YgSurfaceVariant: Color @Composable @ReadOnlyComposable get() = LocalYgPalette.current.surfaceVariant
+val YgSurfaceHigh: Color @Composable @ReadOnlyComposable get() = LocalYgPalette.current.surfaceHigh
+val YgOutline: Color @Composable @ReadOnlyComposable get() = LocalYgPalette.current.outline
+val YgOnSurface: Color @Composable @ReadOnlyComposable get() = LocalYgPalette.current.onSurface
+val YgMuted: Color @Composable @ReadOnlyComposable get() = LocalYgPalette.current.muted
+
+private val DarkColors = darkColorScheme(
+    primary = YgAccent, secondary = YgAccent2, background = DarkPalette.background, surface = DarkPalette.surface,
+    surfaceVariant = DarkPalette.surfaceVariant, outline = DarkPalette.outline, onBackground = DarkPalette.onSurface,
+    onSurface = DarkPalette.onSurface, onSurfaceVariant = DarkPalette.muted, error = Color(0xFFFF5B74),
+)
+private val LightColors = lightColorScheme(
+    primary = YgAccent, secondary = YgAccent2, background = LightPalette.background, surface = LightPalette.surface,
+    surfaceVariant = LightPalette.surfaceVariant, outline = Color(0xFF7D8590), onBackground = LightPalette.onSurface,
+    onSurface = LightPalette.onSurface, onSurfaceVariant = LightPalette.muted, error = Color(0xFFD93251),
+    // Dialog, menu, dan lembar bawah memakai tingkat "surfaceContainer": diset netral agar tidak berona ungu bawaan M3.
+    surfaceContainerLowest = Color(0xFFFFFFFF), surfaceContainerLow = Color(0xFFF6F7F9), surfaceContainer = Color(0xFFF1F2F5),
+    surfaceContainerHigh = Color(0xFFEBEDF0), surfaceContainerHighest = Color(0xFFE4E6EA),
+)
 // Efek ripple putih transparan saat ditekan dimatikan di seluruh aplikasi.
 @OptIn(ExperimentalMaterial3Api::class)
 private val NoRipple = RippleConfiguration(rippleAlpha = RippleAlpha(0f, 0f, 0f, 0f))
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun YouTubeGOTheme(darkTheme: Boolean = true, content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = if (darkTheme) DarkColors else LightColors, typography = YgTypography, shapes = YgShapes) {
-        CompositionLocalProvider(LocalRippleConfiguration provides NoRipple, content = content)
+    val palette = if (darkTheme) DarkPalette else LightPalette
+    val typography = remember(darkTheme) { ygTypography(palette.muted) }
+    MaterialTheme(colorScheme = if (darkTheme) DarkColors else LightColors, typography = typography, shapes = YgShapes) {
+        CompositionLocalProvider(LocalRippleConfiguration provides NoRipple, LocalYgPalette provides palette, content = content)
+    }
+}
+
+/**
+ * Untuk layar yang bagian atasnya selalu hitam (pemutar, Shorts): paksa ikon status bar tetap putih
+ * walau tema terang aktif, lalu kembalikan saat layar ditinggalkan.
+ */
+@Composable
+fun ForceLightStatusBarIcons() {
+    val view = LocalView.current
+    DisposableEffect(view) {
+        var ctx = view.context
+        while (ctx is ContextWrapper && ctx !is Activity) ctx = ctx.baseContext
+        val window = (ctx as? Activity)?.window
+        val ctrl = window?.let { WindowCompat.getInsetsController(it, view) }
+        val previous = ctrl?.isAppearanceLightStatusBars
+        ctrl?.isAppearanceLightStatusBars = false
+        onDispose { if (ctrl != null && previous != null) ctrl.isAppearanceLightStatusBars = previous }
     }
 }

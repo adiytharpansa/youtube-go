@@ -21,9 +21,11 @@ import com.app.youtubego.domain.repository.InterestRepository
 import com.app.youtubego.presentation.library.ConfirmDialog
 import com.app.youtubego.presentation.library.SubPageTopBar
 import com.app.youtubego.presentation.library.formatSize
+import com.app.youtubego.presentation.theme.ThemeMode
 import com.app.youtubego.presentation.theme.YgAccent
 import com.app.youtubego.presentation.theme.YgBackground
 import com.app.youtubego.presentation.theme.YgMuted
+import com.app.youtubego.presentation.theme.YgSurface
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 
@@ -38,6 +40,7 @@ class SettingsViewModel @Inject constructor(
     val backgroundPlay = library.backgroundPlay
     val wifiOnlyDownloads = library.wifiOnlyDownloads
     val historyPaused = library.historyPaused
+    val themeMode = library.themeMode
     val downloadItems = downloads.items
 
     fun setAutoplay(on: Boolean) = library.setAutoplay(on)
@@ -45,6 +48,7 @@ class SettingsViewModel @Inject constructor(
     fun setBackgroundPlay(on: Boolean) = library.setBackgroundPlay(on)
     fun setWifiOnlyDownloads(on: Boolean) = library.setWifiOnlyDownloads(on)
     fun setHistoryPaused(on: Boolean) = library.setHistoryPaused(on)
+    fun setThemeMode(mode: ThemeMode) = library.setThemeMode(mode.id)
     fun clearHistory() = library.clearHistory()
     fun resetInterests() = interests.reset()
     fun removeAllDownloads() = downloads.removeAll()
@@ -60,6 +64,8 @@ fun SettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()) 
     val backgroundPlay by vm.backgroundPlay.collectAsState()
     val wifiOnly by vm.wifiOnlyDownloads.collectAsState()
     val historyPaused by vm.historyPaused.collectAsState()
+    val themeId by vm.themeMode.collectAsState()
+    var themeDialog by remember { mutableStateOf(false) }
     val downloads by vm.downloadItems.collectAsState()
     val context = LocalContext.current
     var confirm by remember { mutableStateOf<Confirm?>(null) }
@@ -67,6 +73,10 @@ fun SettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()) 
 
     Scaffold(containerColor = YgBackground, contentWindowInsets = WindowInsets(0, 0, 0, 0), topBar = { SubPageTopBar("Pengaturan", onBack) }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+            Section("Tampilan")
+            val themeMode = ThemeMode.fromId(themeId)
+            ActionRow("Tema", "${themeMode.label} \u2022 ${themeMode.description}") { themeDialog = true }
+
             Section("Pemutaran")
             SwitchRow("Kualitas tinggi sebagai bawaan", "Mati = mulai dari kualitas terendah agar hemat data (360p). Bisa diganti per video di menu pemutar.", highQuality, vm::setHighQuality)
             SwitchRow("Putar di latar belakang", "Suara tetap berjalan saat layar mati atau aplikasi ditutup ke Beranda, dengan kontrol di notifikasi.", backgroundPlay, vm::setBackgroundPlay)
@@ -90,6 +100,8 @@ fun SettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()) 
             }
         }
     }
+
+    if (themeDialog) ThemeDialog(current = ThemeMode.fromId(themeId), onSelect = { vm.setThemeMode(it); themeDialog = false }) { themeDialog = false }
 
     when (confirm) {
         Confirm.HISTORY -> ConfirmDialog("Hapus riwayat?", "Semua video di Riwayat akan dihapus.", "Hapus", { vm.clearHistory(); toast("Riwayat dihapus") }) { confirm = null }
@@ -127,4 +139,27 @@ private fun ActionRow(title: String, subtitle: String, enabled: Boolean = true, 
             color = if (enabled) MaterialTheme.colorScheme.onSurface else YgMuted)
         Text(subtitle, color = YgMuted, style = MaterialTheme.typography.bodySmall)
     }
+}
+
+/** Pilih tema: langsung berlaku begitu salah satu dipilih. */
+@Composable
+private fun ThemeDialog(current: ThemeMode, onSelect: (ThemeMode) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss, containerColor = YgSurface,
+        title = { Text("Pilih tema") },
+        text = {
+            Column {
+                ThemeMode.values().forEach { mode ->
+                    Row(Modifier.fillMaxWidth().clickable { onSelect(mode) }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = mode == current, onClick = { onSelect(mode) }, colors = RadioButtonDefaults.colors(selectedColor = YgAccent))
+                        Column(Modifier.padding(start = 8.dp)) {
+                            Text(mode.label, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium))
+                            Text(mode.description, color = YgMuted, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup") } },
+    )
 }

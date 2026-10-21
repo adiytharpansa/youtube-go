@@ -75,6 +75,7 @@ import com.app.youtubego.presentation.library.LibraryViewModel
 import com.app.youtubego.presentation.library.PlaylistPickerDialog
 import com.app.youtubego.presentation.library.VideoItem
 import com.app.youtubego.data.local.DownloadStatus
+import com.app.youtubego.presentation.theme.ForceLightStatusBarIcons
 import com.app.youtubego.presentation.theme.YgMuted
 import com.app.youtubego.presentation.theme.YgSurface
 import com.app.youtubego.presentation.theme.YgSurfaceVariant
@@ -157,6 +158,7 @@ fun PlayerScreen(
     LaunchedEffect(videoId, runNow) { if (runNow != null && runIndex < 0) holder.clearPlaylist() }
     var shareAt by remember { mutableStateOf<Pair<String, Long>?>(null) }
     // Geser turun di pemutar (portrait): layar ikut turun & mengecil mengikuti jari; lepas lewat ambang = kecilkan.
+    ForceLightStatusBarIcons()
     val dragAnim = remember { Animatable(0f) }
     val dragScope = rememberCoroutineScope()
     val minimizeThresholdPx = with(LocalDensity.current) { 96.dp.toPx() }
@@ -582,7 +584,7 @@ private fun ChannelRow(d: VideoDetail, subscribed: Boolean, onOpen: () -> Unit, 
         if (d.summary.authorId.isNotBlank()) {
             if (subscribed) FilledTonalButton(onClick = onSubscribe) {
                 Icon(Icons.Default.NotificationsActive, null, modifier = Modifier.size(18.dp)); Text(" Terlangganan")
-            } else Button(onClick = onSubscribe, colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)) { Text("Berlangganan") }
+            } else Button(onClick = onSubscribe, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onBackground, contentColor = MaterialTheme.colorScheme.background)) { Text("Berlangganan") }
         }
     }
 }

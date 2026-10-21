@@ -110,7 +110,7 @@ fun ChannelScreen(
                                 Icon(Icons.Default.NotificationsActive, null, modifier = Modifier.size(18.dp)); Text(" Terlangganan")
                             } else Button(
                                 onClick = vm::toggleSubscribe, modifier = Modifier.padding(horizontal = 16.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onBackground, contentColor = MaterialTheme.colorScheme.background),
                             ) { Text("Berlangganan") }
                         }
                         if (c.description.isNotBlank()) item {

@@ -22,13 +22,14 @@ import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
 import com.app.youtubego.domain.model.VideoSummary
 import com.app.youtubego.presentation.theme.YgMuted
+import com.app.youtubego.presentation.theme.YgSurfaceHigh
 import com.app.youtubego.presentation.theme.YgSurfaceVariant
 /** Shimmer tanpa library tambahan: brush linear bergerak, murah di GPU, aman untuk daftar panjang. */
 @Composable
 fun Modifier.shimmer(): Modifier {
     val transition = rememberInfiniteTransition(label = "shimmer")
     val x by transition.animateFloat(-400f, 1200f, infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Restart), label = "x")
-    val brush = Brush.linearGradient(listOf(YgSurfaceVariant, Color(0xFF2A2D35), YgSurfaceVariant), start = Offset(x, 0f), end = Offset(x + 400f, 0f))
+    val brush = Brush.linearGradient(listOf(YgSurfaceVariant, YgSurfaceHigh, YgSurfaceVariant), start = Offset(x, 0f), end = Offset(x + 400f, 0f))
     return this.background(brush)
 }
 @Composable

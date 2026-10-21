@@ -28,6 +28,7 @@ import com.app.youtubego.data.local.UserLibraryStore
 import com.app.youtubego.playback.BackgroundPlaybackEffect
 import com.app.youtubego.playback.PlayerHolder
 import com.app.youtubego.domain.model.VideoSummary
+import com.app.youtubego.presentation.theme.ForceLightStatusBarIcons
 import com.app.youtubego.presentation.theme.YgMuted
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -62,6 +63,7 @@ fun OfflinePlayerScreen(videoId: String, onBack: () -> Unit, vm: OfflinePlayerVi
             )
         }
     }
+    ForceLightStatusBarIcons()
     BackgroundPlaybackEffect(holder, backgroundPlay)
     DisposableEffect(mediaId) { onDispose { holder.stopIfCurrent(mediaId) } }
     Column(Modifier.fillMaxSize().background(Color.Black).statusBarsPadding()) {

@@ -323,7 +323,7 @@ private fun ChannelResultRow(ch: ChannelResult, subscribed: Boolean, onOpen: (St
             Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(18.dp)); Text(" Terlangganan")
         } else Button(
             onClick = { onToggle(ch.id) }, contentPadding = PaddingValues(horizontal = 14.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onBackground, contentColor = MaterialTheme.colorScheme.background),
         ) { Text("Berlangganan", fontWeight = FontWeight.SemiBold) }
     }
 }
