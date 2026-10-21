@@ -29,10 +29,10 @@ fun ygTypography(muted: Color) = Typography(
     titleMedium = BaseTypo.titleMedium.copy(fontFamily = YgFontFamily, fontWeight = FontWeight.Medium, fontSize = 15.sp, lineHeight = 20.sp),
     titleSmall = BaseTypo.titleSmall.copy(fontFamily = YgFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 20.sp),
     bodyLarge = BaseTypo.bodyLarge.copy(fontFamily = YgFontFamily, fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 24.sp),
-    bodyMedium = BaseTypo.bodyMedium.copy(fontFamily = YgFontFamily, fontWeight = FontWeight.Normal, fontSize = 14.sp, lineHeight = 20.sp),
-    bodySmall = BaseTypo.bodySmall.copy(fontFamily = YgFontFamily, fontWeight = FontWeight.Normal, fontSize = 12.sp, lineHeight = 16.sp, color = muted),
-    labelLarge = BaseTypo.labelLarge.copy(fontFamily = YgFontFamily, fontWeight = FontWeight.Medium, fontSize = 14.sp, lineHeight = 20.sp),
-    labelMedium = BaseTypo.labelMedium.copy(fontFamily = YgFontFamily, fontWeight = FontWeight.Medium, fontSize = 13.sp, lineHeight = 16.sp),
-    labelSmall = BaseTypo.labelSmall.copy(fontFamily = YgFontFamily, fontWeight = FontWeight.Medium, fontSize = 11.sp, lineHeight = 14.sp),
+    bodyMedium = BaseTypo.bodyMedium.copy(fontFamily = YgFontFamily, fontWeight = FontWeight.Normal, fontSize = 14.sp, lineHeight = 20.sp, letterSpacing = 0.1.sp),
+    bodySmall = BaseTypo.bodySmall.copy(fontFamily = YgFontFamily, fontWeight = FontWeight.Normal, fontSize = 12.sp, lineHeight = 16.sp, letterSpacing = 0.1.sp, color = muted),
+    labelLarge = BaseTypo.labelLarge.copy(fontFamily = YgFontFamily, fontWeight = FontWeight.Medium, fontSize = 14.sp, lineHeight = 20.sp, letterSpacing = 0.1.sp),
+    labelMedium = BaseTypo.labelMedium.copy(fontFamily = YgFontFamily, fontWeight = FontWeight.Medium, fontSize = 13.sp, lineHeight = 16.sp, letterSpacing = 0.1.sp),
+    labelSmall = BaseTypo.labelSmall.copy(fontFamily = YgFontFamily, fontWeight = FontWeight.Medium, fontSize = 11.sp, lineHeight = 14.sp, letterSpacing = 0.1.sp),
 )
 val YgShapes = Shapes(extraSmall = RoundedCornerShape(5.dp), small = RoundedCornerShape(10.dp), medium = RoundedCornerShape(14.dp), large = RoundedCornerShape(20.dp))

@@ -33,6 +33,10 @@ data class DevicePlayback(
     val subscriberCount: Long = 0L,
     val storyboard: Storyboard? = null,
     val chapters: List<Chapter> = emptyList(),
+    /** Stream video-saja (tanpa audio), terurut kualitas menaik; dipakai Shorts untuk 720p+ lewat penggabungan dengan [audioOnly]. */
+    val videoOnly: List<StreamOption> = emptyList(),
+    /** Stream audio-saja, terurut bitrate menaik. */
+    val audioOnly: List<StreamOption> = emptyList(),
 )
 
 /**
@@ -62,6 +66,19 @@ class DeviceStreamSource @Inject constructor(
                 .filter { it.isUrl() && !it.isVideoOnly && it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP }
                 .sortedBy { it.height }
                 .map { StreamOption(it.url ?: it.content, it.resolution ?: "", it.format?.mimeType ?: "video/mp4") }
+            // Video-saja + audio-saja: kualitas di atas 360p (stream gabungan YouTube umumnya mentok 360p). Terbaik-upaya.
+            val videoOnly = runCatching {
+                extractor.videoOnlyStreams
+                    .filter { it.isUrl() && it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP }
+                    .sortedBy { v -> v.resolution?.takeWhile { c -> c.isDigit() }?.toIntOrNull() ?: v.height }
+                    .map { StreamOption(it.url ?: it.content, it.resolution ?: "", it.format?.mimeType ?: "video/mp4") }
+            }.getOrDefault(emptyList())
+            val audioOnly = runCatching {
+                extractor.audioStreams
+                    .filter { it.isUrl() && it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP }
+                    .sortedBy { it.averageBitrate }
+                    .map { StreamOption(it.url ?: it.content, "${it.averageBitrate}", it.format?.mimeType ?: "audio/mp4") }
+            }.getOrDefault(emptyList())
             val authorId = runCatching {
                 extractor.uploaderUrl.orEmpty().substringAfter("/channel/", "").substringBefore("?").substringBefore("/")
             }.getOrDefault("")
@@ -96,8 +113,10 @@ class DeviceStreamSource @Inject constructor(
                 chapters = runCatching {
                     extractor.streamSegments.map { Chapter(it.title ?: "", it.startTimeSeconds * 1000L) }.sortedBy { it.startMs }
                 }.getOrDefault(emptyList()),
+                videoOnly = videoOnly,
+                audioOnly = audioOnly,
             ).also { cache[videoId] = Cached(System.currentTimeMillis(), it) }
-        }.onSuccess { Log.d(TAG, "ekstraksi $videoId OK: gabungan=${it.combined.size} dash=${it.dashUrl != null} hls=${it.hlsUrl != null}") }.onFailure { Log.w(TAG, "ekstraksi $videoId GAGAL: ${it.javaClass.simpleName}: ${it.message}"); if (it is kotlinx.coroutines.CancellationException) throw it }
+        }.onSuccess { Log.d(TAG, "ekstraksi $videoId OK: gabungan=${it.combined.size} videoOnly=${it.videoOnly.size} audioOnly=${it.audioOnly.size} dash=${it.dashUrl != null} hls=${it.hlsUrl != null}") }.onFailure { Log.w(TAG, "ekstraksi $videoId GAGAL: ${it.javaClass.simpleName}: ${it.message}"); if (it is kotlinx.coroutines.CancellationException) throw it }
     }
 
     private fun ensureInit() {

@@ -1,6 +1,15 @@
 package com.app.youtubego.presentation.navigation
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
@@ -9,6 +18,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.graphicsLayer
 import com.app.youtubego.presentation.theme.pressScaleOf
@@ -63,6 +73,8 @@ private val tabs = listOf(
     Tab(Routes.YOU, "Anda", Icons.Outlined.VideoLibrary, Icons.Filled.VideoLibrary),
 )
 
+private fun isTabRoute(route: String?): Boolean = route != null && tabs.any { it.route == route }
+
 @Composable
 fun YoutubeGoNavHost() {
     val nav = rememberNavController()
@@ -77,6 +89,11 @@ fun YoutubeGoNavHost() {
     // Shorts & pemutar offline punya pemutar sendiri: pemutar utama dijeda agar tidak bersuara ganda.
     val pauseMain = route == Routes.SHORTS || route.startsWith("offline/")
     PlaybackHost(pauseMain, openPlayer)
+    // Di tab Shorts bar bawah menyatu dengan video: hitam pekat, tanpa garis pemisah, ikon & label putih.
+    val onShorts = route == Routes.SHORTS
+    val barColor by animateColorAsState(if (onShorts) Color.Black else YgSurface, tween(200), label = "barColor")
+    val unselectedColor by animateColorAsState(if (onShorts) Color.White.copy(alpha = 0.66f) else YgMuted, tween(200), label = "navUnselected")
+    val selectedTextColor by animateColorAsState(if (onShorts) Color.White else MaterialTheme.colorScheme.onSurface, tween(200), label = "navSelectedText")
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -84,8 +101,8 @@ fun YoutubeGoNavHost() {
         bottomBar = {
             Column {
             if (!onPlayerRoute && !pauseMain) MiniPlayerBar(onOpen = openPlayer)
-            if (showBar) HorizontalDivider(color = YgOutline, thickness = 0.5.dp)
-            if (showBar) NavigationBar(containerColor = YgSurface, tonalElevation = 0.dp) {
+            if (showBar && !onShorts) HorizontalDivider(color = YgOutline, thickness = 0.5.dp)
+            if (showBar) NavigationBar(containerColor = barColor, tonalElevation = 0.dp) {
                 tabs.forEach { tab ->
                     val selected = dest?.hierarchy?.any { it.route == tab.route } == true
                     val navSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
@@ -101,11 +118,15 @@ fun YoutubeGoNavHost() {
                             }
                         },
                         icon = { Icon(if (selected) tab.on else tab.off, contentDescription = null) },
-                        label = { Text(tab.label) },
+                        label = {
+                            // 12sp tanpa jarak huruf tambahan: label tidak renggang & "Langganan" muat satu baris.
+                            Text(tab.label, maxLines = 1, softWrap = false, fontSize = 12.sp, letterSpacing = 0.sp,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
+                        },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = YgAccent, selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                            indicatorColor = YgAccent.copy(alpha = 0.14f),
-                            unselectedIconColor = YgMuted, unselectedTextColor = YgMuted,
+                            selectedIconColor = YgAccent, selectedTextColor = selectedTextColor,
+                            indicatorColor = YgAccent.copy(alpha = if (onShorts) 0.24f else 0.14f),
+                            unselectedIconColor = unselectedColor, unselectedTextColor = unselectedColor,
                         ),
                     )
                 }
@@ -115,11 +136,18 @@ fun YoutubeGoNavHost() {
     ) { pad ->
         NavHost(
             nav, startDestination = Routes.HOME, modifier = Modifier.padding(bottom = pad.calculateBottomPadding()),
-            // Transisi bawaan 700 ms terasa lambat; 120-180 ms terasa instan tapi tetap halus.
-            enterTransition = { androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(160)) },
-            exitTransition = { androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(90)) },
-            popEnterTransition = { androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(160)) },
-            popExitTransition = { androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(90)) },
+            // Transisi bawaan 700 ms terasa lambat. Antar tab utama: pudar + sedikit membesar (220 ms, halus);
+            // halaman lain tetap pudar cepat 90-160 ms supaya terasa instan.
+            enterTransition = {
+                if (isTabRoute(initialState.destination.route) && isTabRoute(targetState.destination.route))
+                    fadeIn(tween(220, easing = FastOutSlowInEasing)) + scaleIn(initialScale = 0.985f, animationSpec = tween(220, easing = FastOutSlowInEasing))
+                else fadeIn(tween(160))
+            },
+            exitTransition = {
+                if (isTabRoute(initialState.destination.route) && isTabRoute(targetState.destination.route)) fadeOut(tween(120)) else fadeOut(tween(90))
+            },
+            popEnterTransition = { fadeIn(tween(160)) },
+            popExitTransition = { fadeOut(tween(90)) },
         ) {
             composable(Routes.HOME) {
                 HomeScreen(onVideoClick = openPlayer, onSearchClick = { nav.navigate(Routes.SEARCH) }, onChannelClick = openChannel)
