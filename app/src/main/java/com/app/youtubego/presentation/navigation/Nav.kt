@@ -19,7 +19,11 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import kotlinx.coroutines.flow.MutableSharedFlow
 import androidx.compose.ui.graphics.graphicsLayer
 import com.app.youtubego.presentation.theme.pressScaleOf
 import androidx.compose.ui.Modifier
@@ -78,6 +82,8 @@ private fun isTabRoute(route: String?): Boolean = route != null && tabs.any { it
 @Composable
 fun YoutubeGoNavHost() {
     val nav = rememberNavController()
+    val haptic = LocalHapticFeedback.current
+    val tabReselect = remember { MutableSharedFlow<String>(extraBufferCapacity = 1) }
     val dest = nav.currentBackStackEntryAsState().value?.destination
     // Bar bawah hanya tampil di 4 halaman utama; Pemutar & Cari layar penuh.
     val showBar = tabs.any { t -> dest?.hierarchy?.any { it.route == t.route } == true }
@@ -112,7 +118,11 @@ fun YoutubeGoNavHost() {
                         interactionSource = navSource,
                         modifier = Modifier.graphicsLayer { scaleX = navScale; scaleY = navScale },
                         onClick = {
-                            nav.navigate(tab.route) {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            if (selected) {
+                                // Ketuk ulang tab aktif: layar menggulir ke atas (tanpa membuat tujuan navigasi baru).
+                                tabReselect.tryEmit(tab.route)
+                            } else nav.navigate(tab.route) {
                                 popUpTo(nav.graph.findStartDestination().id) { saveState = true }
                                 launchSingleTop = true; restoreState = true
                             }
@@ -134,61 +144,63 @@ fun YoutubeGoNavHost() {
             }
         },
     ) { pad ->
-        NavHost(
-            nav, startDestination = Routes.HOME, modifier = Modifier.padding(bottom = pad.calculateBottomPadding()),
-            // Transisi bawaan 700 ms terasa lambat. Antar tab utama: pudar + sedikit membesar (220 ms, halus);
-            // halaman lain tetap pudar cepat 90-160 ms supaya terasa instan.
-            enterTransition = {
-                if (isTabRoute(initialState.destination.route) && isTabRoute(targetState.destination.route))
-                    fadeIn(tween(220, easing = FastOutSlowInEasing)) + scaleIn(initialScale = 0.985f, animationSpec = tween(220, easing = FastOutSlowInEasing))
-                else fadeIn(tween(160))
-            },
-            exitTransition = {
-                if (isTabRoute(initialState.destination.route) && isTabRoute(targetState.destination.route)) fadeOut(tween(120)) else fadeOut(tween(90))
-            },
-            popEnterTransition = { fadeIn(tween(160)) },
-            popExitTransition = { fadeOut(tween(90)) },
-        ) {
-            composable(Routes.HOME) {
-                HomeScreen(onVideoClick = openPlayer, onSearchClick = { nav.navigate(Routes.SEARCH) }, onChannelClick = openChannel)
-            }
-            composable(Routes.SHORTS) { ShortsScreen(onChannelClick = openChannel) }
-            composable(Routes.SUBS) {
-                SubscriptionsScreen(
-                    onVideoClick = openPlayer, onChannelClick = openChannel,
-                    onExplore = { nav.navigate(Routes.HOME) { popUpTo(nav.graph.findStartDestination().id); launchSingleTop = true } },
-                )
-            }
-            composable(Routes.YOU) {
-                LibraryScreen(onVideoClick = openPlayer, onItemClick = { item ->
-                    nav.navigate(when (item) {
-                        LibraryItem.HISTORY -> Routes.HISTORY
-                        LibraryItem.WATCH_LATER -> Routes.WATCH_LATER
-                        LibraryItem.LIKED -> Routes.LIKED
-                        LibraryItem.DOWNLOADS -> Routes.DOWNLOADS
-                        LibraryItem.PLAYLISTS -> Routes.PLAYLISTS
-                        LibraryItem.SETTINGS -> Routes.SETTINGS
+        CompositionLocalProvider(LocalTabReselect provides tabReselect) {
+            NavHost(
+                nav, startDestination = Routes.HOME, modifier = Modifier.padding(bottom = pad.calculateBottomPadding()),
+                // Transisi bawaan 700 ms terasa lambat. Antar tab utama: pudar + sedikit membesar (220 ms, halus);
+                // halaman lain tetap pudar cepat 90-160 ms supaya terasa instan.
+                enterTransition = {
+                    if (isTabRoute(initialState.destination.route) && isTabRoute(targetState.destination.route))
+                        fadeIn(tween(220, easing = FastOutSlowInEasing)) + scaleIn(initialScale = 0.985f, animationSpec = tween(220, easing = FastOutSlowInEasing))
+                    else fadeIn(tween(160))
+                },
+                exitTransition = {
+                    if (isTabRoute(initialState.destination.route) && isTabRoute(targetState.destination.route)) fadeOut(tween(120)) else fadeOut(tween(90))
+                },
+                popEnterTransition = { fadeIn(tween(160)) },
+                popExitTransition = { fadeOut(tween(90)) },
+            ) {
+                composable(Routes.HOME) {
+                    HomeScreen(onVideoClick = openPlayer, onSearchClick = { nav.navigate(Routes.SEARCH) }, onChannelClick = openChannel)
+                }
+                composable(Routes.SHORTS) { ShortsScreen(onChannelClick = openChannel) }
+                composable(Routes.SUBS) {
+                    SubscriptionsScreen(
+                        onVideoClick = openPlayer, onChannelClick = openChannel,
+                        onExplore = { nav.navigate(Routes.HOME) { popUpTo(nav.graph.findStartDestination().id); launchSingleTop = true } },
+                    )
+                }
+                composable(Routes.YOU) {
+                    LibraryScreen(onVideoClick = openPlayer, onItemClick = { item ->
+                        nav.navigate(when (item) {
+                            LibraryItem.HISTORY -> Routes.HISTORY
+                            LibraryItem.WATCH_LATER -> Routes.WATCH_LATER
+                            LibraryItem.LIKED -> Routes.LIKED
+                            LibraryItem.DOWNLOADS -> Routes.DOWNLOADS
+                            LibraryItem.PLAYLISTS -> Routes.PLAYLISTS
+                            LibraryItem.SETTINGS -> Routes.SETTINGS
+                        })
                     })
-                })
-            }
-            composable(Routes.HISTORY) { HistoryScreen(onBack = back, onVideoClick = openPlayer, onChannelClick = openChannel) }
-            composable(Routes.WATCH_LATER) { WatchLaterScreen(onBack = back, onVideoClick = openPlayer, onChannelClick = openChannel) }
-            composable(Routes.LIKED) { LikedScreen(onBack = back, onVideoClick = openPlayer, onChannelClick = openChannel) }
-            composable(Routes.DOWNLOADS) { DownloadsScreen(onBack = back, onPlayOffline = { nav.navigate("offline/$it") }) }
-            composable(Routes.PLAYLISTS) { PlaylistsScreen(onBack = back, onOpen = { nav.navigate("library/playlist/$it") }) }
-            composable(Routes.PLAYLIST, arguments = listOf(navArgument("playlistId") { type = NavType.StringType })) { entry ->
-                PlaylistDetailScreen(entry.arguments?.getString("playlistId").orEmpty(), onBack = back, onVideoClick = openPlayer, onChannelClick = openChannel)
-            }
-            composable(Routes.SETTINGS) { SettingsScreen(onBack = back) }
-            composable(Routes.CHANNEL, arguments = listOf(navArgument("channelId") { type = NavType.StringType })) {
-                ChannelScreen(onBack = back, onVideoClick = openPlayer, onChannelClick = openChannel)
-            }
-            composable(Routes.OFFLINE, arguments = listOf(navArgument("videoId") { type = NavType.StringType })) { entry ->
-                OfflinePlayerScreen(entry.arguments?.getString("videoId").orEmpty(), onBack = back)
-            }
-            composable(Routes.SEARCH) { SearchScreen(onBack = back, onVideoClick = openPlayer, onChannelClick = openChannel) }
-            composable(Routes.PLAYER, arguments = listOf(navArgument("videoId") { type = NavType.StringType })) { entry ->
-                PlayerScreen(videoId = entry.arguments?.getString("videoId").orEmpty(), onBack = back, onVideoClick = openPlayer, onChannelClick = openChannel)
+                }
+                composable(Routes.HISTORY) { HistoryScreen(onBack = back, onVideoClick = openPlayer, onChannelClick = openChannel) }
+                composable(Routes.WATCH_LATER) { WatchLaterScreen(onBack = back, onVideoClick = openPlayer, onChannelClick = openChannel) }
+                composable(Routes.LIKED) { LikedScreen(onBack = back, onVideoClick = openPlayer, onChannelClick = openChannel) }
+                composable(Routes.DOWNLOADS) { DownloadsScreen(onBack = back, onPlayOffline = { nav.navigate("offline/$it") }) }
+                composable(Routes.PLAYLISTS) { PlaylistsScreen(onBack = back, onOpen = { nav.navigate("library/playlist/$it") }) }
+                composable(Routes.PLAYLIST, arguments = listOf(navArgument("playlistId") { type = NavType.StringType })) { entry ->
+                    PlaylistDetailScreen(entry.arguments?.getString("playlistId").orEmpty(), onBack = back, onVideoClick = openPlayer, onChannelClick = openChannel)
+                }
+                composable(Routes.SETTINGS) { SettingsScreen(onBack = back) }
+                composable(Routes.CHANNEL, arguments = listOf(navArgument("channelId") { type = NavType.StringType })) {
+                    ChannelScreen(onBack = back, onVideoClick = openPlayer, onChannelClick = openChannel)
+                }
+                composable(Routes.OFFLINE, arguments = listOf(navArgument("videoId") { type = NavType.StringType })) { entry ->
+                    OfflinePlayerScreen(entry.arguments?.getString("videoId").orEmpty(), onBack = back)
+                }
+                composable(Routes.SEARCH) { SearchScreen(onBack = back, onVideoClick = openPlayer, onChannelClick = openChannel) }
+                composable(Routes.PLAYER, arguments = listOf(navArgument("videoId") { type = NavType.StringType })) { entry ->
+                    PlayerScreen(videoId = entry.arguments?.getString("videoId").orEmpty(), onBack = back, onVideoClick = openPlayer, onChannelClick = openChannel)
+                }
             }
         }
     }

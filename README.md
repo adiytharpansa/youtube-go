@@ -45,6 +45,13 @@ Rincian lengkap ada di [BLUEPRINT.md](BLUEPRINT.md).
 ## Build debug (di GitHub Actions, tanpa PC)
 Actions → **Build Debug APK** → Run workflow → unduh artefak `youtube-go-debug`.
 
+## Baru di v1.51 - polesan tampilan
+- **Font**: judul layar, tombol, chip, dan label navigasi memakai Poppins (res/font; lisensi SIL OFL 1.1). Badan teks dan judul video tetap font sistem agar padat. Satu titik pengganti ada di `theme/TypeAndShape.kt` (`YgDisplayFamily`).
+- **Langganan**: header "Langganan" selalu tampil; keadaan kosong punya baris "Channel populer" (dari video trending asli) dengan tombol Langganan langsung.
+- **Empty state**: cahaya aksen + garis tepi pada ikon, animasi masuk (pudar + geser naik), teks dibatasi lebarnya, isi bergulir di layar pendek.
+- **Tombol utama**: bayangan aksen lembut dan getar halus saat disentuh.
+- **Navigasi bawah**: getar halus saat pindah tab; mengetuk ulang tab aktif (Beranda / Langganan) menggulir ke atas.
+
 ## Baru di v1.44 - putar di latar belakang & streaming lebih lancar
 - **Putar di latar belakang**: suara lanjut saat layar mati / ke Beranda, kontrol di notifikasi & layar kunci (Media3 `MediaSessionService`, foreground service `mediaPlayback`). Bisa dimatikan di Pengaturan.
 - Pemutar tunggal bersama (`playback/PlayerHolder`), tidak lagi dibuat-buang per layar; trek video dimatikan otomatis di latar belakang (hemat kuota & baterai).

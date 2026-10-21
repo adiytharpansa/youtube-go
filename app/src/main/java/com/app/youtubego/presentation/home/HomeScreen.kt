@@ -1,4 +1,6 @@
 package com.app.youtubego.presentation.home
+import com.app.youtubego.presentation.navigation.LocalTabReselect
+import com.app.youtubego.presentation.navigation.Routes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -50,6 +52,9 @@ fun HomeScreen(
     val profile by vm.profile.collectAsState()
     val listState = rememberLazyListState()
     LaunchedEffect(state.category) { listState.scrollToItem(0) }
+    // Ketuk ulang tab "Beranda" saat sudah aktif: gulir ke paling atas.
+    val reselect = LocalTabReselect.current
+    LaunchedEffect(reselect) { reselect.collect { if (it == Routes.HOME) listState.animateScrollToItem(0) } }
     // Beranda selalu mengikuti minat: tiap kembali tampil (mis. setelah menonton/mencari), feed disegarkan bila profil berubah.
     LifecycleResumeEffect(Unit) { vm.refreshIfStale(); onPauseOrDispose { } }
     if (state.showInterestSheet) {
