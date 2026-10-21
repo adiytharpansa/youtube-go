@@ -1,6 +1,18 @@
 package com.app.youtubego.playback
 
 import android.content.Context
+import android.net.Uri
+import android.util.Log
+import androidx.media3.common.MediaMetadata
+import com.app.youtubego.data.newpipe.DeviceStreamSource
+import com.app.youtubego.domain.repository.VideoRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.atomic.AtomicInteger
 import android.content.Intent
 import android.net.ConnectivityManager
 import android.os.Handler
@@ -60,6 +72,8 @@ data class PlaylistRun(val name: String, val videos: List<VideoSummary>)
 class PlayerHolder @Inject constructor(
     @ApplicationContext private val context: Context,
     private val library: UserLibraryStore,
+    private val deviceSource: DeviceStreamSource,
+    private val repo: VideoRepository,
 ) {
 
     val player: ExoPlayer by lazy { create() }
@@ -75,7 +89,14 @@ class PlayerHolder @Inject constructor(
     private val _skipNext = MutableSharedFlow<String>(extraBufferCapacity = 1)
     /** Emisi id video saat pengguna menekan "Berikutnya" dari notifikasi; navigasi aplikasi yang membukanya. */
     val skipNext: SharedFlow<String> = _skipNext.asSharedFlow()
-    fun requestNext() { upNextId?.let { _skipNext.tryEmit(it) } }
+    fun requestNext() {
+        if (!appForeground) {
+            val cur = player.currentMediaItem?.mediaId ?: return
+            nextRef(cur)?.let { advanceTo(it.first, cur) }
+            return
+        }
+        upNextId?.let { _skipNext.tryEmit(it) }
+    }
 
     // ---- Playlist berurutan: Berikutnya/Sebelumnya mengikuti urutan playlist ----
     private val _run = MutableStateFlow<PlaylistRun?>(null)
@@ -86,7 +107,133 @@ class PlayerHolder @Inject constructor(
     @Volatile var upPrevId: String? = null
     private val _skipPrev = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val skipPrev: SharedFlow<String> = _skipPrev.asSharedFlow()
-    fun requestPrevious() { upPrevId?.let { _skipPrev.tryEmit(it) } }
+    fun requestPrevious() {
+        if (!appForeground) {
+            val cur = player.currentMediaItem?.mediaId ?: return
+            upPrevId?.let { advanceTo(it, cur) }
+            return
+        }
+        upPrevId?.let { _skipPrev.tryEmit(it) }
+    }
+
+    // ---- Putar otomatis di LATAR BELAKANG ----
+    // Compose membekukan komposisi saat Activity berhenti, jadi hitung mundur "video berikutnya" di layar pemutar
+    // tidak pernah jalan. Di latar belakang (atau saat hanya mini player), holder sendiri yang memilih video berikutnya,
+    // menyiapkannya SEBELUM video habis (daftar putar 2 item = pindah mulus, service tetap foreground), lalu cadangan
+    // bila belum siap: saat STATE_ENDED video berikutnya dimuat langsung.
+    /** Diisi BackgroundPlaybackEffect: true selama Activity tampil (STARTED). */
+    @Volatile var appForeground = false
+    /** Jumlah layar pemutar yang sedang tersusun; bila > 0 dan aplikasi tampil, layar itulah yang mengurus putar otomatis. */
+    val playerScreens = AtomicInteger(0)
+    /** Video yang terakhir dimulai otomatis oleh holder; dipakai menyelaraskan layar saat aplikasi dibuka lagi. */
+    @Volatile var lastAutoId: String? = null
+    private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var prefetchJob: Job? = null
+    private var advanceJob: Job? = null
+    private var lastPrefetchFailAt = 0L
+    private var lastMediaId: String? = null
+    private val recent = ArrayDeque<String>()
+
+    private fun uiHandlesAutoplay() = appForeground && playerScreens.get() > 0
+
+    /** Buang video berikutnya yang sudah disiapkan (layar pemutar mengambil alih urusan putar otomatis). */
+    fun dropPendingNext() {
+        val p = player
+        if (p.mediaItemCount > 1) p.removeMediaItems(1, p.mediaItemCount)
+    }
+
+    /** Berikutnya: antrean lebih dulu, lalu urutan playlist, lalu rekomendasi pertama. Pasangan (id, ringkasan bila ada). */
+    private fun nextRef(cur: String): Pair<String, VideoSummary?>? {
+        _queue.value.firstOrNull { it.id != cur }?.let { return it.id to it }
+        _run.value?.let { run ->
+            val i = run.videos.indexOfFirst { it.id == cur }
+            if (i >= 0) return run.videos.getOrNull(i + 1)?.let { it.id to it }
+        }
+        return upNextId?.takeIf { it != cur && it !in recent }?.let { it to null }
+    }
+
+    /** Item media untuk putar otomatis: audio-saja terbaik (hemat data di latar belakang), cadangan stream gabungan. */
+    private suspend fun buildAutoItem(id: String): MediaItem? {
+        val dp = withTimeoutOrNull(15_000) { deviceSource.resolve(id).getOrNull() } ?: return null
+        val audios = dp.audioOnly.filter { it.url.isNotBlank() }
+        val audio = (audios.lastOrNull { it.mimeType.contains("mp4") } ?: audios.lastOrNull())?.url
+        val combined = dp.combined.filter { it.url.isNotBlank() }.lastOrNull()?.url
+        val url = audio ?: combined ?: return null
+        val sm = dp.summary
+        return MediaItem.Builder().setMediaId(id).setUri(url)
+            .setMediaMetadata(
+                MediaMetadata.Builder().setTitle(sm.title).setArtist(sm.author)
+                    .apply { if (sm.thumbnailUrl.isNotBlank()) setArtworkUri(Uri.parse(sm.thumbnailUrl)) }.build(),
+            ).build()
+    }
+
+    /** Ganti ke video [id] sekarang juga, tanpa layar pemutar. */
+    fun advanceTo(id: String, prev: String?) {
+        advanceJob?.cancel()
+        advanceJob = bgScope.launch {
+            val item = try { buildAutoItem(id) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null }
+            if (item == null) { Log.w("YGO_PLAYER", "putar otomatis: gagal menyiapkan $id"); return@launch }
+            play(item, videoEnabled = appForeground)
+            afterAutoStart(id, prev)
+        }
+    }
+
+    /** Setelah video otomatis dimulai (pindah mulus atau diganti): rapikan antrean/playlist, tentukan Sebelumnya & Berikutnya. */
+    private fun afterAutoStart(id: String, prev: String?) {
+        lastAutoId = id
+        removeFromQueue(id)
+        prev?.let { recent.addLast(it) }
+        recent.addLast(id)
+        while (recent.size > 12) recent.removeFirst()
+        upNextId = null
+        upPrevId = prev
+        val run = _run.value
+        if (run != null) {
+            val i = run.videos.indexOfFirst { it.id == id }
+            if (i < 0) clearPlaylist()
+            else {
+                upNextId = run.videos.getOrNull(i + 1)?.id
+                upPrevId = run.videos.getOrNull(i - 1)?.id
+                return
+            }
+        }
+        // Rekomendasi pertama (belum pernah diputar berurutan) jadi "berikutnya" untuk video ini.
+        bgScope.launch {
+            val d = try { repo.videoDetail(id).getOrNull() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null }
+            if (d != null && player.currentMediaItem?.mediaId == id) {
+                upNextId = d.recommendations.firstOrNull { it.id != id && it.id !in recent }?.id
+            }
+        }
+    }
+
+    /** Cadangan: video habis & tak ada yang disiapkan sebelumnya. */
+    private fun maybeAutoAdvance() {
+        if (!library.autoplay.value || uiHandlesAutoplay()) return
+        val cur = player.currentMediaItem?.mediaId ?: return
+        if (cur.startsWith("offline:") || player.isCurrentMediaItemLive) return
+        nextRef(cur)?.let { advanceTo(it.first, cur) }
+    }
+
+    private val nextPoll = object : Runnable {
+        override fun run() { pollNext(); if (player.isPlaying) handler.postDelayed(this, 5_000) }
+    }
+
+    /** Sisa <= 45 dtk: siapkan video berikutnya sebagai item kedua di daftar putar agar perpindahan mulus. */
+    private fun pollNext() {
+        if (!library.autoplay.value || uiHandlesAutoplay() || prefetchJob?.isActive == true) return
+        val p = player
+        val cur = p.currentMediaItem?.mediaId ?: return
+        if (cur.startsWith("offline:") || p.isCurrentMediaItemLive || p.mediaItemCount != 1) return
+        val dur = p.duration
+        if (dur == C.TIME_UNSET || dur - p.currentPosition > 45_000L) return
+        if (System.currentTimeMillis() - lastPrefetchFailAt < 15_000L) return
+        val ref = nextRef(cur) ?: return
+        prefetchJob = bgScope.launch {
+            val item = try { buildAutoItem(ref.first) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null }
+            if (item == null) { lastPrefetchFailAt = System.currentTimeMillis(); return@launch }
+            if (player.currentMediaItem?.mediaId == cur && player.mediaItemCount == 1 && !uiHandlesAutoplay()) player.addMediaItem(item)
+        }
+    }
 
     // ---- Antrean ("Tambahkan ke antrean"): diputar lebih dulu daripada rekomendasi saat video selesai / Berikutnya ----
     private val _queue = MutableStateFlow<List<VideoSummary>>(emptyList())
@@ -209,10 +356,19 @@ class PlayerHolder @Inject constructor(
                 it.addListener(object : Player.Listener {
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
                         handler.removeCallbacks(saveRunnable)
+                        handler.removeCallbacks(nextPoll)
                         persistProgress()
-                        if (isPlaying) handler.postDelayed(saveRunnable, 10_000)
+                        if (isPlaying) { handler.postDelayed(saveRunnable, 10_000); handler.post(nextPoll) }
                     }
-                    override fun onPlaybackStateChanged(playbackState: Int) { if (playbackState == Player.STATE_ENDED) persistProgress() }
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        if (playbackState == Player.STATE_ENDED) { persistProgress(); maybeAutoAdvance() }
+                    }
+                    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                        val prev = lastMediaId
+                        lastMediaId = mediaItem?.mediaId
+                        // Pindah otomatis ke item yang sudah disiapkan di latar belakang.
+                        if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && mediaItem != null) afterAutoStart(mediaItem.mediaId, prev)
+                    }
                 })
             }
     }

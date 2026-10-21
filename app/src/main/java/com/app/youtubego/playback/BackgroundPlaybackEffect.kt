@@ -23,8 +23,16 @@ fun BackgroundPlaybackEffect(holder: PlayerHolder, backgroundPlay: Boolean) {
         val lifecycle = (context.findComponentActivity())?.lifecycle
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_STOP -> if (backgroundPlay) holder.setVideoEnabled(false) else holder.player.pause()
-                Lifecycle.Event.ON_START -> holder.setVideoEnabled(true)
+                Lifecycle.Event.ON_STOP -> {
+                    holder.appForeground = false
+                    if (backgroundPlay) holder.setVideoEnabled(false) else holder.player.pause()
+                }
+                Lifecycle.Event.ON_START -> {
+                    holder.appForeground = true
+                    holder.setVideoEnabled(true)
+                    // Layar pemutar tampil lagi: ia yang mengurus putar otomatis, buang video yang disiapkan holder.
+                    if (holder.playerScreens.get() > 0) holder.dropPendingNext()
+                }
                 else -> Unit
             }
         }

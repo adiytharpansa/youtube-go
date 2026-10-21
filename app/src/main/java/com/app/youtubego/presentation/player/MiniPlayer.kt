@@ -54,10 +54,25 @@ class MiniPlayerViewModel @Inject constructor(val holder: PlayerHolder, library:
  * dan menjeda pemutar utama saat layar lain yang punya pemutar sendiri (Shorts/offline) tampil.
  */
 @Composable
-fun PlaybackHost(pauseMain: Boolean, onOpenVideo: (String) -> Unit, vm: MiniPlayerViewModel = hiltViewModel()) {
+fun PlaybackHost(pauseMain: Boolean, routeVideoId: String?, onOpenVideo: (String) -> Unit, vm: MiniPlayerViewModel = hiltViewModel()) {
     val backgroundPlay by vm.backgroundPlay.collectAsState()
     BackgroundPlaybackEffect(vm.holder, backgroundPlay)
     val open by rememberUpdatedState(onOpenVideo)
+    val routeId by rememberUpdatedState(routeVideoId)
+    // Video berganti sendiri saat di latar belakang (putar otomatis): saat aplikasi dibuka, layar pemutar yang masih
+    // menampilkan video lama diganti ke video yang sedang diputar.
+    val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_START) {
+                val rid = routeId
+                val cur = vm.holder.player.currentMediaItem?.mediaId
+                if (rid != null && cur != null && cur != rid && cur == vm.holder.lastAutoId) open(cur)
+            }
+        }
+        owner.lifecycle.addObserver(obs)
+        onDispose { owner.lifecycle.removeObserver(obs) }
+    }
     LaunchedEffect(Unit) { vm.holder.skipNext.collect { open(it) } }
     LaunchedEffect(Unit) { vm.holder.skipPrev.collect { open(it) } }
     LaunchedEffect(pauseMain) { if (pauseMain) vm.holder.player.pause() }

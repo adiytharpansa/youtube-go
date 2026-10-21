@@ -180,6 +180,9 @@ fun PlayerScreen(
     val minimizeThresholdPx = with(LocalDensity.current) { 96.dp.toPx() }
     // ON_STOP (layar mati / ke Beranda): suara lanjut bila "Putar di latar belakang" aktif, selain itu jeda.
     BackgroundPlaybackEffect(holder, backgroundPlay)
+    // Penanda layar pemutar aktif (hitungan, karena pindah video sesaat menyusun dua layar): putar otomatis di
+    // latar belakang diurus PlayerHolder, di layar ini diurus hitung mundur 5 dtk.
+    DisposableEffect(holder) { holder.playerScreens.incrementAndGet(); holder.dropPendingNext(); onDispose { holder.playerScreens.decrementAndGet() } }
     DisposableEffect(videoId) {
         onDispose {
             // Pulihkan orientasi & system bars bila layar ditinggalkan saat fullscreen.

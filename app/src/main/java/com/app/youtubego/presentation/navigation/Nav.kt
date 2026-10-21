@@ -84,7 +84,8 @@ fun YoutubeGoNavHost() {
     val nav = rememberNavController()
     val haptic = LocalHapticFeedback.current
     val tabReselect = remember { MutableSharedFlow<String>(extraBufferCapacity = 1) }
-    val dest = nav.currentBackStackEntryAsState().value?.destination
+    val entry = nav.currentBackStackEntryAsState().value
+    val dest = entry?.destination
     // Bar bawah hanya tampil di 4 halaman utama; Pemutar & Cari layar penuh.
     val showBar = tabs.any { t -> dest?.hierarchy?.any { it.route == t.route } == true }
     val openPlayer: (String) -> Unit = { id ->
@@ -101,7 +102,7 @@ fun YoutubeGoNavHost() {
     val onPlayerRoute = route.startsWith("player/")
     // Shorts & pemutar offline punya pemutar sendiri: pemutar utama dijeda agar tidak bersuara ganda.
     val pauseMain = route == Routes.SHORTS || route.startsWith("offline/")
-    PlaybackHost(pauseMain, openPlayer)
+    PlaybackHost(pauseMain, if (onPlayerRoute) entry?.arguments?.getString("videoId") else null, openPlayer)
     // Di tab Shorts bar bawah menyatu dengan video: hitam pekat, tanpa garis pemisah, ikon & label putih.
     val onShorts = route == Routes.SHORTS
     val barColor by animateColorAsState(if (onShorts) Color.Black else YgSurface, tween(200), label = "barColor")
