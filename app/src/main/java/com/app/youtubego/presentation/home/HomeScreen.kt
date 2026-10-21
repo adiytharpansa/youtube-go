@@ -54,7 +54,7 @@ fun HomeScreen(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Image(painterResource(R.drawable.ic_logo_mark), contentDescription = null, modifier = Modifier.size(28.dp))
-                        Text("YouTube GO", fontWeight = FontWeight.ExtraBold)
+                        Text("YouTube GO : Next", fontWeight = FontWeight.ExtraBold)
                     }
                 },
                 actions = {

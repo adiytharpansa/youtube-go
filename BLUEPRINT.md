@@ -1,4 +1,4 @@
-# BLUEPRINT TEKNIS — YouTube GO Android Native (Kotlin)
+# BLUEPRINT TEKNIS — YouTube GO : Next Android Native (Kotlin)
 
 > Aplikasi Android **native 100% Kotlin** dari konsep web app YouTube GO
 > (live: https://youtube-go-adityas-projects-2ad3da13.vercel.app):

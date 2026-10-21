@@ -1,4 +1,4 @@
-# YouTube GO - keep serialization models
+# YouTube GO : Next - keep serialization models
 -keepattributes *Annotation*, InnerClasses
 -dontnote kotlinx.serialization.**
 -keep,includedescriptorclasses class com.app.youtubego.**$$serializer { *; }

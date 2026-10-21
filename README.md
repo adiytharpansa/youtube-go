@@ -1,10 +1,13 @@
-# YouTube GO — Android Native (Kotlin)
+# YouTube GO : Next — Android Native (Kotlin)
 
 Aplikasi Android native dari konsep web app **YouTube GO**: minimalis, cepat, hemat data, Dark Theme default.
 Arsitektur: **MVVM + Clean Architecture** (data / domain / presentation), Hilt, Media3 ExoPlayer, Coil, NewPipeExtractor, Kotlinx Serialization, Coroutines & Flow.
 
 **API:** tanpa server perantara — semua data & stream diekstrak langsung di perangkat dari YouTube memakai NewPipeExtractor (sejak v1.45; jalur Invidious/proksi Vercel sudah dibuang).
 Rincian lengkap ada di [BLUEPRINT.md](BLUEPRINT.md).
+
+## Baru di v1.50 - ikon aplikasi baru
+- Ikon adaptif modern: dua segitiga play (maju cepat = "go") pada gradien merah. Dibuat sebagai vector drawable (`ic_launcher_background/foreground/monochrome`) sehingga tajam di semua densitas, termasuk ikon bertema Android 13. PNG cadangan untuk Android 7.x ada di `mipmap-*`. Tanda yang sama dipakai di bar atas Beranda (`ic_logo_mark`).
 
 ## Baru di v1.49 - teks CC, komentar, geser kecilkan interaktif
 - **Teks CC**: Pengaturan pemutar punya "Ukuran teks CC" (Kecil..Sangat besar) dan "Gaya teks CC" (latar transparan, tanpa latar, kuning, latar hitam); pilihan tersimpan.
