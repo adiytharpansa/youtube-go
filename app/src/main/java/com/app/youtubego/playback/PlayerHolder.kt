@@ -14,9 +14,10 @@ import com.app.youtubego.data.local.UserLibraryStore
 import com.app.youtubego.domain.model.VideoSummary
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
@@ -28,6 +29,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import okhttp3.ConnectionPool
+import okhttp3.Dispatcher
+import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -119,25 +124,43 @@ class PlayerHolder @Inject constructor(
      * Sumber data HTTP dengan header per-klien YouTube. Dibagi ke pemutar lain (Shorts) agar URL stream tidak
      * ditolak server karena User-Agent bawaan ExoPlayer tak cocok dengan klien pembuat URL.
      */
+    /** Satu klien HTTP untuk semua media (utama, Shorts, unduhan): kolam koneksi bersama, HTTP/2, tanpa cache respons. */
+    private val mediaClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .dispatcher(Dispatcher().apply { maxRequests = 32; maxRequestsPerHost = 16 })
+            .connectionPool(ConnectionPool(8, 5, TimeUnit.MINUTES))
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+    }
+
+    /** true bila jaringan aktif berbayar (data seluler): prefetch dikurangi agar kuota hemat. */
+    fun isMetered(): Boolean {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        return cm?.isActiveNetworkMetered == true
+    }
+
     val dataSourceFactory: androidx.media3.datasource.DataSource.Factory by lazy {
         // Catatan: User-Agent TIDAK diatur di pabrik ini (di Media3 nilai itu menimpa header per-permintaan);
         // diatur per permintaan lewat ResolvingDataSource, mengikuti klien YouTube pembuat URL (param c=).
-        val http = DefaultHttpDataSource.Factory()
-            .setConnectTimeoutMs(15_000)
-            .setReadTimeoutMs(20_000)
-            .setAllowCrossProtocolRedirects(true)
+        val http = OkHttpDataSource.Factory(mediaClient)
         ResolvingDataSource.Factory(DefaultDataSource.Factory(context, http)) { spec -> ClientHeaders.apply(spec) }
     }
 
     private fun create(): ExoPlayer {
         val dataSource = dataSourceFactory
-        // Buffer lebih lapang dari bawaan untuk jaringan seluler yang naik-turun; mulai putar cepat (1,5 dtk),
-        // setelah buffering ulang tunggu 4 dtk agar tidak "buffer-putar-buffer" berulang.
+        // Mulai putar secepat mungkin (0,5 dtk data cukup), setelah buffering ulang tunggu 2,5 dtk agar tidak
+        // "buffer-putar-buffer" berulang. Buffer ke depan 30-90 dtk untuk jaringan seluler yang naik-turun, dan
+        // 30 dtk buffer belakang supaya mundur/ulang beberapa detik langsung jalan tanpa mengunduh lagi.
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(25_000, 60_000, 1_500, 4_000)
+            .setBufferDurationsMs(30_000, 90_000, 500, 2_500)
+            .setBackBuffer(30_000, true)
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
-        return ExoPlayer.Builder(context)
+        // Dekoder cadangan: bila dekoder utama gagal inisialisasi (sering di HP murah), coba dekoder lain, bukan galat.
+        val renderers = DefaultRenderersFactory(context).setEnableDecoderFallback(true)
+        return ExoPlayer.Builder(context, renderers)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSource))
             .setLoadControl(loadControl)
             .setAudioAttributes(
@@ -165,13 +188,24 @@ class PlayerHolder @Inject constructor(
     fun autoMaxSize(): Pair<Int, Int> = if (library.highQuality.value) 1920 to 1080 else 1280 to 720
 
     /**
-     * Tinggi video (px) yang dipilih mode "Otomatis" untuk sumber video-saja + audio-saja (tanpa ABR):
-     * "Kualitas tinggi" = 1080p; selain itu 720p di Wi-Fi dan 480p di data seluler (jaringan berbayar).
+     * Tinggi video (px) yang dipilih mode "Otomatis" untuk sumber video-saja + audio-saja (tanpa ABR).
+     * Dipilih dari kecepatan unduh yang dilaporkan jaringan aktif (agar mulai cepat & tidak tersendat):
+     * >= 12 Mbps = 720p (1080p bila "Kualitas tinggi" aktif), >= 5 Mbps = 480p, >= 2 Mbps = 360p, lebih lambat = 240p.
+     * Data seluler (berbayar) dibatasi maksimal 480p kecuali "Kualitas tinggi" aktif.
      */
     fun autoHeight(): Int {
-        if (library.highQuality.value) return 1080
+        val high = library.highQuality.value
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-        return if (cm?.isActiveNetworkMetered == true) 480 else 720
+        val kbps = runCatching { cm?.getNetworkCapabilities(cm.activeNetwork)?.linkDownstreamBandwidthKbps }.getOrNull() ?: 0
+        val byBandwidth = when {
+            kbps <= 0 -> 720            // tak diketahui: perlakukan seperti sebelumnya
+            kbps >= 12_000 -> if (high) 1080 else 720
+            kbps >= 5_000 -> 480
+            kbps >= 2_000 -> 360
+            else -> 240
+        }
+        if (high) return maxOf(byBandwidth, if (kbps in 1..4_999) byBandwidth else 1080)
+        return if (cm?.isActiveNetworkMetered == true) minOf(byBandwidth, 480) else byBandwidth
     }
 
     private fun defaultSelection(p: Player, videoEnabled: Boolean): TrackSelectionParameters =

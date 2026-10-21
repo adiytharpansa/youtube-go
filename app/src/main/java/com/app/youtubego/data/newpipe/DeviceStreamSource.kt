@@ -5,8 +5,14 @@ import com.app.youtubego.domain.model.Chapter
 import com.app.youtubego.domain.model.Storyboard
 import com.app.youtubego.domain.model.StreamOption
 import com.app.youtubego.domain.model.VideoSummary
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import org.schabi.newpipe.extractor.stream.StreamExtractor
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.localization.ContentCountry
@@ -51,17 +57,75 @@ class DeviceStreamSource @Inject constructor(
 ) {
     @Volatile private var initialized = false
 
-    /** Cache pendek: ekstraksi memakan 1-3 dtk, dan Shorts/unduhan sering meminta video yang sama. URL YouTube berlaku berjam-jam. */
-    private class Cached(val at: Long, val value: DevicePlayback)
-    private val cache = ConcurrentHashMap<String, Cached>()
+    /** Scope sendiri: ekstraksi yang sudah berjalan TIDAK ikut batal saat satu pemanggil (layar) batal; hasilnya tetap dipakai pemanggil berikutnya. */
+    private val scope = CoroutineScope(SupervisorJob() + io)
+
+    private class Entry<T>(val at: Long, val job: Deferred<T>)
+    /** Satu unduhan halaman tonton per video (dipakai bersama pemutar, detail, Shorts, unduhan, dan prefetch). */
+    private val extractors = ConcurrentHashMap<String, Entry<StreamExtractor>>()
+    /** Hasil ekstraksi (DevicePlayback). Permintaan serentak untuk video yang sama menunggu pekerjaan yang SAMA (tidak ekstraksi ganda). */
+    private val playbacks = ConcurrentHashMap<String, Entry<DevicePlayback>>()
+
+    private fun <T> fresh(map: ConcurrentHashMap<String, Entry<T>>, id: String, start: () -> Deferred<T>): Entry<T> {
+        val now = System.currentTimeMillis()
+        val e = map.compute(id) { _, old ->
+            if (old != null && now - old.at < CACHE_TTL_MS && !old.job.isCancelled) old else Entry(now, start())
+        }!!
+        if (map.size > MAX_ENTRIES) map.entries.filter { it.key != id }.minByOrNull { it.value.at }?.let { map.remove(it.key) }
+        return e
+    }
+
+    /** Buang cache video ini (URL lama kedaluwarsa/ditolak): pemanggilan berikutnya mengambil data segar. */
+    fun invalidate(videoId: String) { extractors.remove(videoId); playbacks.remove(videoId) }
+
+    /** Extractor yang SUDAH fetchPage() untuk video ini; dipakai bersama agar halaman tonton hanya diunduh sekali. */
+    suspend fun sharedExtractor(videoId: String): StreamExtractor {
+        val e = fresh(extractors, videoId) {
+            scope.async {
+                ensureInit()
+                ServiceList.YouTube.getStreamExtractor("https://www.youtube.com/watch?v=$videoId").also { it.fetchPage() }
+            }
+        }
+        return try { e.job.await() } catch (t: Throwable) { extractors.remove(videoId, e); throw t }
+    }
+
+    /** Mulai ekstraksi di latar belakang (hasil masuk cache). Dipakai untuk video yang HAMPIR PASTI diputar berikutnya. */
+    fun prefetch(videoId: String) {
+        if (videoId.isBlank()) return
+        scope.launch { runCatching { resolve(videoId) } }
+    }
+
+    /** Siapkan NewPipe + koneksi TLS ke YouTube sebelum pengguna menekan video pertama. */
+    fun warmUp() {
+        scope.launch {
+            runCatching { ensureInit() }
+            runCatching { downloader.warmUp() }
+        }
+    }
 
     /** [force] = true WAJIB untuk "coba lagi": URL lama mungkin kedaluwarsa/ditolak, jangan pakai cache. */
-    suspend fun resolve(videoId: String, force: Boolean = false): Result<DevicePlayback> = withContext(io) {
-        if (!force) cache[videoId]?.takeIf { System.currentTimeMillis() - it.at < CACHE_TTL_MS }?.let { Log.d(TAG, "ekstraksi $videoId: dari cache"); return@withContext Result.success(it.value) }
-        runCatching {
-            ensureInit()
-            val extractor = ServiceList.YouTube.getStreamExtractor("https://www.youtube.com/watch?v=$videoId")
-            extractor.fetchPage()
+    suspend fun resolve(videoId: String, force: Boolean = false): Result<DevicePlayback> {
+        if (force) invalidate(videoId)
+        val cachedHit = playbacks[videoId]?.takeIf { it.job.isCompleted && !it.job.isCancelled && System.currentTimeMillis() - it.at < CACHE_TTL_MS }
+        if (cachedHit != null) Log.d(TAG, "ekstraksi $videoId: dari cache")
+        val e = fresh(playbacks, videoId) { scope.async { extract(videoId) } }
+        return try {
+            Result.success(e.job.await()).also {
+                if (cachedHit == null) { val v = it.getOrNull()!!; Log.d(TAG, "ekstraksi $videoId OK: gabungan=${v.combined.size} videoOnly=${v.videoOnly.size} audioOnly=${v.audioOnly.size} dash=${v.dashUrl != null} hls=${v.hlsUrl != null}") }
+            }
+        } catch (t: Throwable) {
+            if (t is CancellationException && e.job.isActive) throw t   // pemanggil dibatalkan, ekstraksi tetap jalan di scope
+            playbacks.remove(videoId, e)
+            if (t is CancellationException) throw t
+            Log.w(TAG, "ekstraksi $videoId GAGAL: ${t.javaClass.simpleName}: ${t.message}")
+            Result.failure(t)
+        }
+    }
+
+    private suspend fun extract(videoId: String): DevicePlayback {
+        val extractor = sharedExtractor(videoId)
+        // Getter extractor tidak aman dipakai dua thread sekaligus; pemutar & detail berbagi objek yang sama.
+        return synchronized(extractor) {
             val combined = extractor.videoStreams
                 .filter { it.isUrl() && !it.isVideoOnly && it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP }
                 .sortedBy { it.height }
@@ -115,8 +179,8 @@ class DeviceStreamSource @Inject constructor(
                 }.getOrDefault(emptyList()),
                 videoOnly = videoOnly,
                 audioOnly = audioOnly,
-            ).also { cache[videoId] = Cached(System.currentTimeMillis(), it) }
-        }.onSuccess { Log.d(TAG, "ekstraksi $videoId OK: gabungan=${it.combined.size} videoOnly=${it.videoOnly.size} audioOnly=${it.audioOnly.size} dash=${it.dashUrl != null} hls=${it.hlsUrl != null}") }.onFailure { Log.w(TAG, "ekstraksi $videoId GAGAL: ${it.javaClass.simpleName}: ${it.message}"); if (it is kotlinx.coroutines.CancellationException) throw it }
+            )
+        }
     }
 
     private fun ensureInit() {
@@ -131,5 +195,5 @@ class DeviceStreamSource @Inject constructor(
         }
     }
 
-    private companion object { const val CACHE_TTL_MS = 20 * 60 * 1000L; const val TAG = "YGO_PLAYER" }
+    private companion object { const val CACHE_TTL_MS = 20 * 60 * 1000L; const val MAX_ENTRIES = 16; const val TAG = "YGO_PLAYER" }
 }

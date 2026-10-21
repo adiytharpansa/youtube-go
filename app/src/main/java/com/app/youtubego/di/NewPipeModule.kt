@@ -8,6 +8,8 @@ import javax.inject.Named
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import okhttp3.ConnectionPool
+import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
@@ -24,8 +26,12 @@ object NewPipeModule {
     @Provides @Singleton
     fun newPipeDownloader(): OkHttpNewPipeDownloader = OkHttpNewPipeDownloader(
         OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
+            // Banyak permintaan paralel (pemutar, detail, komentar, prefetch) + koneksi HTTP/2 yang dipakai ulang.
+            .dispatcher(Dispatcher().apply { maxRequests = 64; maxRequestsPerHost = 16 })
+            .connectionPool(ConnectionPool(8, 5, TimeUnit.MINUTES))
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(25, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
             .build(),
     )
 }

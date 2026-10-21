@@ -45,6 +45,13 @@ Rincian lengkap ada di [BLUEPRINT.md](BLUEPRINT.md).
 ## Build debug (di GitHub Actions, tanpa PC)
 Actions → **Build Debug APK** → Run workflow → unduh artefak `youtube-go-debug`.
 
+## Baru di v1.53.1 - video mulai & jalan lebih cepat
+- **Satu unduhan, bukan dua**: halaman tonton YouTube dulu diekstrak dua kali paralel (pemutar + detail) dan stream di-parse dua kali; kini dibagi lewat `DeviceStreamSource.sharedExtractor` (permintaan serentak menunggu pekerjaan yang sama).
+- **Prefetch**: 2 video berikutnya (1 di data seluler; antrean lebih dulu) diekstrak di latar belakang, jadi "Berikutnya"/putar otomatis hampir instan.
+- **Pemanasan**: NewPipe + koneksi TLS/HTTP/2 ke YouTube dibuka saat aplikasi start.
+- **Sumber media OkHttp** (HTTP/2, kolam koneksi bersama video+audio) menggantikan HttpURLConnection; klien ekstraksi punya kolam koneksi & paralelisme lebih besar.
+- **Buffer**: mulai putar setelah 0,5 dtk data (sebelumnya 1,5), buffer depan 30-90 dtk, buffer belakang 30 dtk (mundur instan), dekoder cadangan aktif. Tunggu detail untuk takarir dipangkas 1,2 dtk -> 0,4 dtk.
+
 ## Baru di v1.53 - pemutar setara YouTube + logo dirapikan
 - **Kualitas sampai 1080p**: sebelumnya pemutar utama hanya memutar stream gabungan 360p (YouTube tidak memberi manifes DASH untuk video biasa). Kini video-saja + audio-saja digabung (`MergingMediaSource`): Otomatis = 720p di Wi-Fi / 480p di data seluler (1080p bila "Kualitas tinggi" aktif). Menu Kualitas menampilkan 144p-1080p dan label "Otomatis (720p)" sesuai yang benar-benar diputar. H.264 didahulukan (paling kompatibel); bila gagal, otomatis turun ke stream gabungan.
 - **PiP**: rasio jendela mengikuti video, tombol putar/jeda di jendela, masuk PiP mulus lewat gestur Beranda (Android 12+).

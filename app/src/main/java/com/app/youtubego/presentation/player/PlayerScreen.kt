@@ -323,7 +323,8 @@ fun PlayerScreen(
         val devHasStream = dev != null && (!dev.dashUrl.isNullOrBlank() || dev.combined.isNotEmpty() || !dev.hlsUrl.isNullOrBlank())
         if (!devHasStream && state is UiState.Loading) return@LaunchedEffect // tunggu API; efek diulang saat detail tiba
         if (devHasStream && state is UiState.Loading) {
-            withTimeoutOrNull(1200) { snapshotFlow { state is UiState.Loading }.first { !it } }
+            // Detail kini berbagi unduhan dengan ekstraksi perangkat sehingga tiba hampir bersamaan; tunggu singkat saja (untuk takarir).
+            withTimeoutOrNull(400) { snapshotFlow { state is UiState.Loading }.first { !it } }
         }
         val d = (state as? UiState.Success)?.data
         val devDash = dev?.dashUrl

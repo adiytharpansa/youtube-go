@@ -43,6 +43,7 @@ import javax.inject.Singleton
 @Singleton
 class NewPipeVideoRepository @Inject constructor(
     private val downloader: OkHttpNewPipeDownloader,
+    private val deviceSource: DeviceStreamSource,
     @Named("io") private val io: CoroutineDispatcher,
 ) : VideoRepository {
 
@@ -233,9 +234,13 @@ class NewPipeVideoRepository @Inject constructor(
     }
 
     override suspend fun videoDetail(id: String): Result<VideoDetail> = runIo {
-        ensureInit()
-        val extractor = ServiceList.YouTube.getStreamExtractor(watchUrl(id))
-        extractor.fetchPage()
+        // Halaman tonton diunduh SEKALI dan dibagi dengan pemutar (DeviceStreamSource); dulu diunduh dua kali paralel.
+        val extractor = deviceSource.sharedExtractor(id)
+        val dev = deviceSource.resolve(id).getOrNull()
+        synchronized(extractor) { buildDetail(id, extractor, dev) }
+    }
+
+    private fun buildDetail(id: String, extractor: org.schabi.newpipe.extractor.stream.StreamExtractor, dev: DevicePlayback?): VideoDetail {
         val summary = VideoSummary(
             id = id,
             title = extractor.name ?: "",
@@ -248,17 +253,18 @@ class NewPipeVideoRepository @Inject constructor(
             published = runCatching { extractor.uploadDate?.offsetDateTime()?.toEpochSecond() }.getOrNull() ?: 0L,
             isLive = extractor.streamType == StreamType.LIVE_STREAM,
         )
-        VideoDetail(
+        return VideoDetail(
             summary = summary,
             description = runCatching { extractor.description.content }.getOrNull() ?: "",
             likeCount = runCatching { extractor.likeCount }.getOrDefault(0L).coerceAtLeast(0L),
             subscriberText = subscriberText(runCatching { extractor.uploaderSubscriberCount }.getOrDefault(0L)),
-            combinedStreams = extractor.videoStreams
+            // Daftar stream sudah dihitung sekali oleh DeviceStreamSource; jangan urai ulang (mahal: dekode parameter anti-throttle).
+            combinedStreams = dev?.combined ?: extractor.videoStreams
                 .filter { it.isUrl() && !it.isVideoOnly && it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP }
                 .sortedBy { it.height }
                 .map { StreamOption(it.url ?: it.content, it.resolution ?: "", it.format?.mimeType ?: "video/mp4") },
-            dashUrl = runCatching { extractor.dashMpdUrl }.getOrNull()?.takeIf { it.isNotBlank() },
-            hlsUrl = runCatching { extractor.hlsUrl }.getOrNull()?.takeIf { it.isNotBlank() },
+            dashUrl = dev?.dashUrl ?: runCatching { extractor.dashMpdUrl }.getOrNull()?.takeIf { it.isNotBlank() },
+            hlsUrl = dev?.hlsUrl ?: runCatching { extractor.hlsUrl }.getOrNull()?.takeIf { it.isNotBlank() },
             captions = runCatching { extractor.subtitlesDefault }.getOrDefault(emptyList()).map {
                 CaptionTrack(
                     label = it.displayLanguageName.ifBlank { it.languageTag },

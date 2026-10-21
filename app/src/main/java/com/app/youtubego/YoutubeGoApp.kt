@@ -4,13 +4,23 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import com.app.youtubego.data.newpipe.DeviceStreamSource
 import dagger.hilt.android.HiltAndroidApp
+import javax.inject.Inject
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
 @HiltAndroidApp
 class YoutubeGoApp : Application(), ImageLoaderFactory {
+    @Inject lateinit var deviceSource: DeviceStreamSource
+
+    override fun onCreate() {
+        super.onCreate()
+        // Panaskan NewPipe + koneksi TLS ke YouTube di latar belakang: video pertama yang diketuk tidak menunggu handshake/inisialisasi.
+        deviceSource.warmUp()
+    }
+
     /**
      * Pemuat gambar global agar thumbnail tampil cepat:
      * - cache memori 25% RAM + cache disk 256 MB (thumbnail yang pernah dilihat langsung muncul),

@@ -77,7 +77,7 @@ class PlayerViewModel @Inject constructor(
         (_state.value as? UiState.Success)?.data?.summary ?: _device.value?.summary
     init { load() }
     /** Muat ulang dari awal (URL putar kedaluwarsa, jadi retry WAJIB mengambil data segar dari kedua jalur, bukan memutar ulang URL lama). */
-    fun retry() { forceFresh = true; load() }
+    fun retry() { forceFresh = true; deviceSource.invalidate(videoId); load() }
     fun toggleLike() { val v = currentSummary(); if (v != null) library.toggleLiked(v) else library.toggleLiked(videoId) }
     fun toggleSave() { val v = currentSummary(); if (v != null) library.toggleSaved(v) else library.toggleSaved(videoId) }
     fun download() { currentSummary()?.let { downloads.start(it) } }
@@ -94,14 +94,15 @@ class PlayerViewModel @Inject constructor(
         _deviceSettled.value = false
         commentsJob = getComments(videoId).onEach { _comments.value = it }.launchIn(viewModelScope)
         job = getDetail(videoId).onEach { result ->
-            if (result is UiState.Success) { recordWatchOnce(result.data.summary); library.addHistory(result.data.summary) }
+            if (result is UiState.Success) { recordWatchOnce(result.data.summary); library.addHistory(result.data.summary); prefetchNext(result.data.recommendations) }
             val dev = _device.value
             _state.value = if (result is UiState.Error && dev != null) UiState.Success(fallbackDetail(dev)).also { loadRelatedFallback(dev.summary) } else result
             // Detail sukses tapi YouTube tak memberi video terkait: isi lewat pencarian berdasarkan judul.
             if (result is UiState.Success && result.data.recommendations.isEmpty()) loadRelatedFallback(result.data.summary)
         }.launchIn(viewModelScope)
         deviceJob = viewModelScope.launch {
-            val resolved = deviceSource.resolve(videoId, force = forceFresh).getOrNull()
+            // Cache sudah dibuang di retry(); jangan force lagi di sini (akan membatalkan ekstraksi yang sedang dipakai detail).
+            val resolved = deviceSource.resolve(videoId).getOrNull()
             forceFresh = false
             _device.value = resolved
             resolved?.let { recordWatchOnce(it.summary); if (_state.value !is UiState.Success) library.addHistory(it.summary) }
@@ -113,6 +114,13 @@ class PlayerViewModel @Inject constructor(
             }
         }
     }
+    /** Ekstrak lebih dulu video yang paling mungkin diputar berikutnya (Berikutnya/putar otomatis jadi langsung). Seluler: hanya 1. */
+    private fun prefetchNext(recs: List<VideoSummary>) {
+        // Antrean pengguna diputar lebih dulu daripada rekomendasi.
+        val ids = (holder.queue.value.map { it.id } + recs.map { it.id }).filter { it != videoId }.distinct()
+        ids.take(if (holder.isMetered()) 1 else 2).forEach { deviceSource.prefetch(it) }
+    }
+
     /** Rekomendasi cadangan: pencarian berdasarkan judul (terbaik-upaya; kosong bila API juga tak terjangkau). */
     private fun loadRelatedFallback(s: VideoSummary) {
         val query = s.title.take(60).ifBlank { return }

@@ -13,8 +13,8 @@ android {
         applicationId = "com.app.youtubego"
         minSdk = 24
         targetSdk = 34
-        versionCode = 53
-        versionName = "1.53.0"
+        versionCode = 54
+        versionName = "1.53.1"
     }
     buildTypes {
         release { isMinifyEnabled = true; isShrinkResources = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") }
@@ -54,6 +54,8 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-dash:1.5.0")
     implementation("androidx.media3:media3-ui:1.5.0")
     implementation("androidx.media3:media3-session:1.5.0")
+    // Sumber data HTTP berbasis OkHttp: HTTP/2, koneksi dipakai ulang (video + audio satu host), handshake TLS lebih jarang.
+    implementation("androidx.media3:media3-datasource-okhttp:1.5.0")
     // Coil (cache hemat data)
     implementation("io.coil-kt:coil-compose:2.7.0")
     // NewPipeExtractor: ekstraksi stream YouTube DI PERANGKAT (IP pengguna), jalur putar utama spike.

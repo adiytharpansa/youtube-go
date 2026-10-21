@@ -15,6 +15,13 @@ import java.io.IOException
  */
 class OkHttpNewPipeDownloader(private val client: OkHttpClient) : Downloader() {
 
+    /** Buka koneksi TCP+TLS(+HTTP/2) ke host YouTube lebih awal; permintaan ekstraksi pertama tidak lagi membayar handshake. */
+    fun warmUp() {
+        for (u in listOf("https://www.youtube.com/generate_204", "https://youtubei.googleapis.com/generate_204")) {
+            runCatching { client.newCall(okhttp3.Request.Builder().url(u).head().build()).execute().close() }
+        }
+    }
+
     @Throws(IOException::class, ReCaptchaException::class)
     override fun execute(request: Request): Response {
         val builder = okhttp3.Request.Builder().url(request.url())
