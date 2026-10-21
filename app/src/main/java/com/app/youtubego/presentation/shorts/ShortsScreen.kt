@@ -58,6 +58,9 @@ import com.app.youtubego.presentation.common.formatViewsId
 import com.app.youtubego.presentation.theme.YgAccent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -93,7 +96,7 @@ class ShortsViewModel @Inject constructor(
     val saved: StateFlow<Set<String>> = library.saved
     val subscribed: StateFlow<Set<String>> = library.subscribed
 
-    private val queries = listOf("shorts") + TopicCatalog.all.map { "#shorts ${it.label}" }
+    private val queries = listOf("shorts", "#shorts viral", "shorts lucu", "shorts musik") + TopicCatalog.all.map { "#shorts ${it.label}" }
     private var cursor = 0
     private var job: Job? = null
 
@@ -112,21 +115,47 @@ class ShortsViewModel @Inject constructor(
         job = viewModelScope.launch { fetch(initial = false) }
     }
 
-    /** Ambil kueri berikutnya sampai ada video baru (maks. 4 percobaan agar tidak menembak server tanpa henti). */
+    /**
+     * Ambil kueri berikutnya sampai ada Short baru. Penyebab "Shorts belum bisa dimuat" sebelumnya: hasil pencarian
+     * kebanyakan video panjang, sehingga saringan durasi membuang semuanya. Sekarang: 2 kueri paralel per putaran
+     * (maks. 5 putaran), saringan <= 3 menit, dan bila tetap kosong pada muat pertama, pakai video terpendek
+     * dari hasil yang ada supaya layar Shorts selalu menampilkan sesuatu.
+     */
     private suspend fun fetch(initial: Boolean) {
         val known = _state.value.videos.mapTo(HashSet()) { it.id }
         var fresh: List<VideoSummary> = emptyList()
+        val pool = LinkedHashMap<String, VideoSummary>()
         var lastError: Throwable? = null
-        var tries = 0
-        while (fresh.isEmpty() && tries < 4) {
-            tries++
-            val q = queries[cursor % queries.size]
-            val page = cursor / queries.size + 1
-            cursor++
-            repo.search(q, page = page, shortsOnly = true).fold(
-                onSuccess = { list -> fresh = list.filter { it.lengthSeconds in 1..180 && known.add(it.id) } },
-                onFailure = { lastError = it },
-            )
+        var rounds = 0
+        while (fresh.isEmpty() && rounds < 5) {
+            rounds++
+            val batch = List(2) {
+                val q = queries[cursor % queries.size]
+                val page = cursor / queries.size + 1
+                cursor++
+                q to page
+            }
+            val results = coroutineScope {
+                batch.map { (q, p) -> async { repo.search(q, page = p, shortsOnly = false) } }.awaitAll()
+            }
+            val shorts = ArrayList<VideoSummary>()
+            results.forEach { r ->
+                r.fold(
+                    onSuccess = { list ->
+                        list.forEach { v ->
+                            if (v.isLive || v.lengthSeconds <= 0 || v.id in known) return@forEach
+                            if (v.lengthSeconds <= 180) { if (known.add(v.id)) shorts += v }
+                            else if (v.lengthSeconds <= 600) pool.putIfAbsent(v.id, v)
+                        }
+                    },
+                    onFailure = { lastError = it },
+                )
+            }
+            fresh = shorts
+        }
+        // Cadangan: tak ada video <= 3 menit sama sekali -> tampilkan yang terpendek (<= 10 menit).
+        if (fresh.isEmpty() && _state.value.videos.isEmpty() && pool.isNotEmpty()) {
+            fresh = pool.values.sortedBy { it.lengthSeconds }.take(20).filter { known.add(it.id) }
         }
         _state.update { cur ->
             if (fresh.isEmpty() && cur.videos.isEmpty()) cur.copy(loading = false, loadingMore = false, error = (lastError ?: IllegalStateException("kosong")).toFriendlyMessage())
