@@ -13,4 +13,4 @@ jobs:
       - name: Build debug APK
         run: gradle :app:assembleDebug --no-daemon
       - uses: actions/upload-artifact@v7
-        with: { name: youtube-go-debug, path: app/build/outputs/apk/debug/*.apk }
+        with: { name: playtube-lite-debug, path: app/build/outputs/apk/debug/*.apk }

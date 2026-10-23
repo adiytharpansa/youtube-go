@@ -1,6 +1,6 @@
 # Baseline profile tulisan tangan (wildcard): mengompilasi lebih awal jalur startup & scroll agar tidak patah-patah.
 # Untuk hasil paling akurat, hasilkan lewat modul Macrobenchmark (BaselineProfileRule) dan timpa berkas ini.
-HSPLcom/app/youtubego/**;->**(**)**
+HSPLcom/app/playtubelite/**;->**(**)**
 HSPLandroidx/compose/runtime/**;->**(**)**
 HSPLandroidx/compose/ui/**;->**(**)**
 HSPLandroidx/compose/foundation/**;->**(**)**
@@ -14,7 +14,7 @@ Landroidx/compose/runtime/**;
 Landroidx/compose/ui/**;
 Landroidx/compose/foundation/**;
 Landroidx/compose/material3/**;
-Lcom/app/youtubego/**;
+Lcom/app/playtubelite/**;
 HSPLandroidx/media3/**;->**(**)**
 HSPLkotlinx/coroutines/**;->**(**)**
 HSPLokhttp3/**;->**(**)**

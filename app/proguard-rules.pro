@@ -1,10 +1,10 @@
-# YouTube GO : Next - keep serialization models
+# Playtube LITE - keep serialization models
 -keepattributes *Annotation*, InnerClasses
 -dontnote kotlinx.serialization.**
--keep,includedescriptorclasses class com.app.youtubego.**$$serializer { *; }
--keep class com.app.youtubego.data.remote.dto.** { *; }
--keepclassmembers @kotlinx.serialization.Serializable class com.app.youtubego.** { *** Companion; }
--keepclasseswithmembers class com.app.youtubego.** { kotlinx.serialization.KSerializer serializer(...); }
+-keep,includedescriptorclasses class com.app.playtubelite.**$$serializer { *; }
+-keep class com.app.playtubelite.data.remote.dto.** { *; }
+-keepclassmembers @kotlinx.serialization.Serializable class com.app.playtubelite.** { *** Companion; }
+-keepclasseswithmembers class com.app.playtubelite.** { kotlinx.serialization.KSerializer serializer(...); }
 # Dipanggil lewat refleksi (ClientHeaders.extractorUserAgent): jangan di-rename/dibuang oleh R8.
 -keepclassmembers class org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper { public static java.lang.String get*UserAgent(...); }
 

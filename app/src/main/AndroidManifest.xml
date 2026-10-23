@@ -8,20 +8,20 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <application
-        android:name=".YoutubeGoApp"
+        android:name=".PlaytubeApp"
         android:allowBackup="false"
         android:largeHeap="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:label="YouTube GO : Next"
+        android:label="Playtube LITE"
         android:supportsRtl="true"
         android:usesCleartextTraffic="false"
-        android:theme="@style/Theme.YouTubeGO">
+        android:theme="@style/Theme.PlaytubeLITE">
         <activity android:name=".MainActivity" android:exported="true"
             android:launchMode="singleTask"
             android:supportsPictureInPicture="true"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
-            android:theme="@style/Theme.YouTubeGO.Starting">
+            android:theme="@style/Theme.PlaytubeLITE.Starting">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

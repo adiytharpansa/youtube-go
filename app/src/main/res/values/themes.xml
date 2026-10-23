@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.YouTubeGO" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.PlaytubeLITE" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">#FFFFFF</item>
         <item name="android:statusBarColor">#FFFFFF</item>
     </style>
-    <!-- Splash resmi (SplashScreen API, Android 12+ dan kompatibel hingga API 24): logo di tengah, lalu beralih ke Theme.YouTubeGO.
+    <!-- Splash resmi (SplashScreen API, Android 12+ dan kompatibel hingga API 24): logo di tengah, lalu beralih ke Theme.PlaytubeLITE.
          Memakai ic_launcher_foreground karena sudah berada di dalam safe zone (tidak terpotong mask lingkaran splash). -->
-    <style name="Theme.YouTubeGO.Starting" parent="Theme.SplashScreen">
+    <style name="Theme.PlaytubeLITE.Starting" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/splash_bg</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
-        <item name="postSplashScreenTheme">@style/Theme.YouTubeGO</item>
+        <item name="postSplashScreenTheme">@style/Theme.PlaytubeLITE</item>
     </style>
 </resources>

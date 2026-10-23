@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Mode malam sistem: jendela hitam AMOLED sejak frame pertama (tidak ada kilatan putih sebelum Compose tampil). -->
-    <style name="Theme.YouTubeGO" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.PlaytubeLITE" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">#000000</item>
         <item name="android:statusBarColor">#000000</item>
         <item name="android:navigationBarColor">#000000</item>

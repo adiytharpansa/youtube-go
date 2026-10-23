@@ -1,10 +1,14 @@
-# YouTube GO : Next — Android Native (Kotlin)
+# Playtube LITE — Android Native (Kotlin)
 
-Aplikasi Android native dari konsep web app **YouTube GO**: minimalis, cepat, hemat data, Dark Theme default.
+Aplikasi Android native dari konsep web app **Playtube LITE**: minimalis, cepat, hemat data, Dark Theme default.
 Arsitektur: **MVVM + Clean Architecture** (data / domain / presentation), Hilt, Media3 ExoPlayer, Coil, NewPipeExtractor, Kotlinx Serialization, Coroutines & Flow.
 
-**API:** tanpa server perantara — semua data & stream diekstrak langsung di perangkat dari YouTube memakai NewPipeExtractor (sejak v1.45; jalur Invidious/proksi Vercel sudah dibuang).
+**API:** murni **NewPipeExtractor + YouTube** — semua data & stream diekstrak langsung di perangkat. Tidak ada server perantara dan tidak ada sumber data lain.
 Rincian lengkap ada di [BLUEPRINT.md](BLUEPRINT.md).
+
+## Playtube LITE - murni NewPipeExtractor
+- Nama aplikasi, package (`com.app.playtubelite`), dan identitas internal diganti ke Playtube LITE.
+- `DeviceStreamSource` hanya memakai NewPipeExtractor. "Coba lagi" membuang cache video lalu mengekstrak ulang.
 
 ## Baru di v1.50 - ikon aplikasi baru
 - Ikon adaptif modern: dua segitiga play (maju cepat = "go") pada gradien merah. Dibuat sebagai vector drawable (`ic_launcher_background/foreground/monochrome`) sehingga tajam di semua densitas, termasuk ikon bertema Android 13. PNG cadangan untuk Android 7.x ada di `mipmap-*`. Tanda yang sama dipakai di bar atas Beranda (`ic_logo_mark`).
@@ -34,19 +38,16 @@ Rincian lengkap ada di [BLUEPRINT.md](BLUEPRINT.md).
 
 ## Baru di v1.45 - 100% di perangkat (tanpa server perantara)
 
-- Semua data & putar kini diekstrak langsung di HP dengan NewPipeExtractor: beranda, pencarian,
-  saran, detail, komentar, channel, dan stream. Tumpukan Invidious (instance publik) + proksi
-  Vercel DIBUANG dari aplikasi - terukur tidak bisa diandalkan (stream gabungan kosong, manifes
-  DASH cangkang kosong), dan permintaan dari IP pengguna tidak menabrak dinding pusat data.
+- Semua data & putar diekstrak langsung di HP dengan NewPipeExtractor: beranda, pencarian,
+  saran, detail, komentar, channel, dan stream. Permintaan berangkat dari IP pengguna.
 - Pemutar: failover antar sumber - satu kali ambil URL segar, lalu pindah ke sumber berikutnya;
-  pesan galat menampilkan kode HTTP sebenarnya. Log diagnosis bertag `YGO_PLAYER`
-  (`adb logcat -s YGO_PLAYER`): hasil ekstraksi, sumber yang dipakai, dan penyebab gagal (host saja).
+  pesan galat menampilkan kode HTTP sebenarnya. Log diagnosis bertag `PTL_PLAYER`
+  (`adb logcat -s PTL_PLAYER`): hasil ekstraksi, sumber yang dipakai, dan penyebab gagal (host saja).
 
 ## Build debug (di GitHub Actions, tanpa PC)
-Actions → **Build Debug APK** → Run workflow → unduh artefak `youtube-go-debug`.
+Actions → **Build Debug APK** → Run workflow → unduh artefak `playtube-lite-debug`.
 
-## Baru di v1.54.0 - ekstraktor sendiri + cache media
-- **Jalur utama buatan sendiri** (`data/innertube/InnertubeClient.kt`): SATU permintaan POST ke `/youtubei/v1/player` (klien ANDROID_VR, URL langsung tanpa JavaScript/cipher) menggantikan beberapa permintaan NewPipe. **NewPipeExtractor tetap jadi cadangan otomatis**: bila jalur sendiri gagal mengekstrak, atau pemutaran dari jalur itu gagal (mis. 403), video itu pindah ke NewPipe; 3 kegagalan beruntun mematikan jalur sendiri 15-30 menit lalu dicoba lagi. YouTube bisa menutup klien ini kapan saja - itulah gunanya cadangan. Storyboard/bab dilengkapi NewPipe di latar belakang.
+## Baru di v1.54.0 - cache media
 - **Cache media disk 256 MB (LRU)**: menonton ulang, mundur, dan kembali ke video yang sama tidak mengunduh lagi. Kunci cache stabil (id-stream+itag+ukuran) karena URL googlevideo berganti tiap kali.
 - **Prefetch Beranda**: 2 video teratas diekstrak lebih dulu (Wi-Fi saja).
 - **Kualitas otomatis** mengikuti kecepatan jaringan (720p >=12 Mbps, 480p >=5, 360p >=2; data seluler maks 480p).
@@ -72,7 +73,7 @@ Actions → **Build Debug APK** → Run workflow → unduh artefak `youtube-go-d
 - **Status bar**: ikon dipulihkan sesuai tema dengan penghitung referensi (tidak lagi bisa tertinggal pudar setelah pemutar/Shorts).
 
 ## Baru di v1.51 - polesan tampilan
-- **Font**: judul layar, tombol, chip, dan label navigasi memakai Poppins (res/font; lisensi SIL OFL 1.1). Badan teks dan judul video tetap font sistem agar padat. Satu titik pengganti ada di `theme/TypeAndShape.kt` (`YgDisplayFamily`).
+- **Font**: judul layar, tombol, chip, dan label navigasi memakai Poppins (res/font; lisensi SIL OFL 1.1). Badan teks dan judul video tetap font sistem agar padat. Satu titik pengganti ada di `theme/TypeAndShape.kt` (`PtDisplayFamily`).
 - **Langganan**: header "Langganan" selalu tampil; keadaan kosong punya baris "Channel populer" (dari video trending asli) dengan tombol Langganan langsung.
 - **Empty state**: cahaya aksen + garis tepi pada ikon, animasi masuk (pudar + geser naik), teks dibatasi lebarnya, isi bergulir di layar pendek.
 - **Tombol utama**: bayangan aksen lembut dan getar halus saat disentuh.
@@ -81,7 +82,7 @@ Actions → **Build Debug APK** → Run workflow → unduh artefak `youtube-go-d
 ## Baru di v1.44 - putar di latar belakang & streaming lebih lancar
 - **Putar di latar belakang**: suara lanjut saat layar mati / ke Beranda, kontrol di notifikasi & layar kunci (Media3 `MediaSessionService`, foreground service `mediaPlayback`). Bisa dimatikan di Pengaturan.
 - Pemutar tunggal bersama (`playback/PlayerHolder`), tidak lagi dibuat-buang per layar; trek video dimatikan otomatis di latar belakang (hemat kuota & baterai).
-- Mulai putar tidak lagi menunggu server proksi; tidak restart dari 0 saat detail API tiba; otomatis ambil URL segar bila stream putus/403 dan lanjut dari posisi terakhir.
+- Tidak restart dari 0 saat detail API tiba; otomatis ambil URL segar bila stream putus/403 dan lanjut dari posisi terakhir.
 - Shorts: pra-ekstrak 2 Short berikutnya, fokus audio, tidak menyala sendiri setelah dijeda.
 
 ## Halaman & fitur (v1.43)

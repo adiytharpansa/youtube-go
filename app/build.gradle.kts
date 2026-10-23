@@ -7,10 +7,10 @@ plugins {
     id("com.google.devtools.ksp")
 }
 android {
-    namespace = "com.app.youtubego"
+    namespace = "com.app.playtubelite"
     compileSdk = 35
     defaultConfig {
-        applicationId = "com.app.youtubego"
+        applicationId = "com.app.playtubelite"
         minSdk = 24
         targetSdk = 34
         versionCode = 60
@@ -58,7 +58,7 @@ dependencies {
     implementation("androidx.media3:media3-datasource-okhttp:1.5.0")
     // Coil (cache hemat data)
     implementation("io.coil-kt:coil-compose:2.7.0")
-    // NewPipeExtractor: ekstraksi stream YouTube DI PERANGKAT (IP pengguna), jalur putar utama spike.
+    // NewPipeExtractor: satu-satunya sumber data; ekstraksi YouTube DI PERANGKAT (IP pengguna).
     implementation("com.github.teamnewpipe:NewPipeExtractor:v0.26.5")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
